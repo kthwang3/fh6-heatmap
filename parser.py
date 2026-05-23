@@ -1,5 +1,6 @@
 import struct
 import socket
+import time
 from collections import namedtuple
 
 FMT = '<iIfff' + 'f' * 24 + 'i' * 8 + 'f' * 16 + 'i' * 5  + 'I' + 'f' * 19 + 'H' + 'B' * 6 + 'bbbx'
@@ -51,6 +52,8 @@ def listen(port=5301):
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   sock.bind(('', port))
   print(f'Listening on UDP port {port}...')
+  last_time = 0
+  last_pos = (0.0, 0.0)
   while True:
     data, _ = sock.recvfrom(1024)
     if len(data) != 324:
@@ -58,7 +61,12 @@ def listen(port=5301):
     pkt = parse(data)
     if not pkt.IsRaceOn:
       continue
-    print(f'X={pkt.PositionX:10.1f} Z={pkt.PositionZ:10.1f} speed={pkt.Speed * 3.6:.1f} km/h')
+    last_x, last_z = last_pos
+    if time.time() - last_time >= 5 or (((last_x - pkt.PositionX)**2 + (last_z - pkt.PositionZ)**2)**0.5) >= 50:
+      last_time = time.time()
+      last_pos = (pkt.PositionX, pkt.PositionZ)
+      print(f'X={pkt.PositionX:10.1f} Z={pkt.PositionZ:10.1f} speed={pkt.Speed * 3.6:.1f} km/h')
+
 if __name__ == '__main__':
   listen()
 
