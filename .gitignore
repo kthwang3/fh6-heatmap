@@ -1,2 +1,6 @@
 fh6-project-context.md
 *:Zone.Identifier
+.terraform/
+*.tfstate
+*.tfstate.backup
+lambda.zip
