@@ -19,6 +19,7 @@ module "lambda" {
 module "api_gateway" {
   source = "./modules/api_gateway"
   lambda_invoke_arn = module.lambda.invoke_arn
+  lambda_aggregate_invoke_arn = module.lambda.aggregate_invoke_arn
 }
 module "s3" {
   source = "./modules/s3"
