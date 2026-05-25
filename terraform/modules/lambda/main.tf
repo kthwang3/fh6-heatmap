@@ -19,6 +19,6 @@ resource "aws_lambda_function" "lambda_function" {
   function_name = "fh6-lambda"
   runtime = "python3.12"
   handler = "main.handler"
-  filename = "../../../lambda.zip"
+  filename = "../lambda.zip"
   role = aws_iam_role.lambda_role.arn
 }
