@@ -25,4 +25,5 @@ resource "aws_api_gateway_deployment" "position_deployment" {
   depends_on = [
     aws_api_gateway_integration.position_integration
   ]
+  stage_name = "prod"
 }
