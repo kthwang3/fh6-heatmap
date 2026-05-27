@@ -1,4 +1,6 @@
 fh6-project-context.md
+fh6-frontend-context.md
+.claude/
 *:Zone.Identifier
 .terraform/
 *.tfstate

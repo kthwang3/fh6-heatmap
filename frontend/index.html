@@ -1,1 +1,607 @@
-<h1>FH6 Heatmap</h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FH6 Community Heatmap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,600;0,700;1,300&family=Outfit:wght@300;400;500;600;700&family=Noto+Serif+JP:wght@400;600;700&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+  body { font-family: 'Outfit', sans-serif; background: #2a3f4f; }
+  button { font-family: inherit; }
+  button:hover { filter: brightness(0.92); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes petalFall {
+    0%   { transform: translateY(-10px) translateX(0px) rotate(0deg);   opacity: 0; }
+    8%   { opacity: 0.82; }
+    28%  { transform: translateY(25vh) translateX(22px)  rotate(95deg); }
+    52%  { transform: translateY(52vh) translateX(-14px) rotate(200deg); }
+    76%  { transform: translateY(78vh) translateX(28px)  rotate(320deg); }
+    92%  { opacity: 0.52; }
+    100% { transform: translateY(110vh) translateX(8px)  rotate(430deg); opacity: 0; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useRef, useEffect, useLayoutEffect, useCallback } = React;
+
+/* ── Constants ───────────────────────────────────────────── */
+const HEATMAP_URL = 'https://s60170byjh.execute-api.us-east-1.amazonaws.com/prod/heatmap';
+const MAP_SIZE  = 6144;
+const GRID_SIZE = 100;
+const CELL_PX   = MAP_SIZE / GRID_SIZE;
+const MIN_ZOOM  = 0.5;
+const MAX_ZOOM  = 5;
+
+/* ── Design tokens ───────────────────────────────────────── */
+const T = {
+  washi:  '#FAF8F3',
+  torii:  '#C5442C',
+  ink:    '#1C1410',
+  wood:   '#6B5240',
+  border: '#E2D9CE',
+  subtle: '#F2ECE5',
+  glass:  'rgba(250,248,243,0.9)',
+};
+const GRAD = 'linear-gradient(to right,rgba(109,40,217,.6),rgba(219,39,119,.78),rgba(249,115,22,.92),rgba(255,220,160,1))';
+const TABS = [['Today','今日','day'],['Week','週間','week'],['Month','月間','month']];
+
+/* ── Zoom/pan clamp helper ───────────────────────────────── */
+function clampAxis(nval, viewDim, scaledDim) {
+  if (scaledDim <= viewDim) return (viewDim - scaledDim) / 2; // center when smaller than viewport
+  return Math.max(viewDim - scaledDim, Math.min(0, nval));
+}
+
+/* ── Heatmap drawing ─────────────────────────────────────── */
+function intensityColor(t) {
+  const stops = [
+    { p: 0.00, r: 109, g:  40, b: 217 },
+    { p: 0.33, r: 219, g:  39, b: 119 },
+    { p: 0.66, r: 249, g: 115, b:  22 },
+    { p: 1.00, r: 255, g: 220, b: 160 },
+  ];
+  let lo = stops[0], hi = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (t >= stops[i].p && t <= stops[i + 1].p) { lo = stops[i]; hi = stops[i + 1]; break; }
+  }
+  const range = hi.p - lo.p || 1;
+  const loc = (t - lo.p) / range;
+  return {
+    r: Math.round(lo.r + (hi.r - lo.r) * loc),
+    g: Math.round(lo.g + (hi.g - lo.g) * loc),
+    b: Math.round(lo.b + (hi.b - lo.b) * loc),
+  };
+}
+
+function drawHeatmap(canvas, grid) {
+  if (!canvas || !grid) return 0;
+  const ctx = canvas.getContext('2d');
+  canvas.width  = MAP_SIZE;
+  canvas.height = MAP_SIZE;
+  ctx.clearRect(0, 0, MAP_SIZE, MAP_SIZE);
+  let max = 0, total = 0;
+  for (const row of grid) for (const v of row) { if (v > max) max = v; total += v; }
+  if (max === 0) return 0;
+  ctx.globalCompositeOperation = 'lighter';
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < grid[r].length; c++) {
+      const v = grid[r][c];
+      if (v === 0) continue;
+      const density = v / max;
+      const { r: cr, g: cg, b: cb } = intensityColor(density);
+      const alpha = Math.min(0.1 + density * 0.52, 0.74);
+      const x  = c * CELL_PX;
+      const y  = (GRID_SIZE - 1 - r) * CELL_PX;
+      const pcx = x + CELL_PX / 2;
+      const pcy = y + CELL_PX / 2;
+      const radius = CELL_PX * (1.35 + density * 1.08);
+      const grad = ctx.createRadialGradient(pcx, pcy, 0, pcx, pcy, radius);
+      grad.addColorStop(0,    `rgba(${cr},${cg},${cb},${alpha.toFixed(3)})`);
+      grad.addColorStop(0.48, `rgba(${cr},${cg},${cb},${(alpha * 0.55).toFixed(3)})`);
+      grad.addColorStop(1,    `rgba(${cr},${cg},${cb},0)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(pcx - radius, pcy - radius, radius * 2, radius * 2);
+    }
+  }
+  return total;
+}
+
+function formatNum(n) { return n.toLocaleString('en-US'); }
+
+/* ── Components ──────────────────────────────────────────── */
+function Wordmark() {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+      <div style={{ width:34, height:34, borderRadius:'50%', background:T.torii,
+        flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <span style={{ fontFamily:'Outfit,sans-serif', fontWeight:700, fontSize:11,
+          color:'#fff', letterSpacing:'-.02em' }}>FH6</span>
+      </div>
+      <div>
+        <div style={{ fontFamily:'Spectral,serif', fontWeight:600, fontSize:14, color:T.ink,
+          letterSpacing:'.1em', textTransform:'uppercase', lineHeight:1.1 }}>Community Heatmap</div>
+        <div style={{ fontFamily:'Outfit,sans-serif', fontWeight:300, fontSize:9, color:T.wood,
+          letterSpacing:'.18em', textTransform:'uppercase', marginTop:2 }}>
+          Forza Horizon 6 · Japan Map</div>
+      </div>
+    </div>
+  );
+}
+
+function FilterPills({ active, onChange }) {
+  return (
+    <div style={{ display:'flex', gap:6 }}>
+      {TABS.map(([en, jp, key]) => (
+        <button key={key} onClick={() => onChange(key)}
+          style={{ padding:'8px 18px',
+            border:`1.5px solid ${active === key ? T.torii : T.border}`,
+            borderRadius:100,
+            background: active === key ? T.torii : 'rgba(255,255,255,.9)',
+            color: active === key ? '#fff' : T.ink,
+            fontFamily:'Outfit,sans-serif', fontSize:13,
+            fontWeight: active === key ? 600 : 400,
+            cursor:'pointer', backdropFilter:'blur(10px)',
+            display:'flex', flexDirection:'column', alignItems:'center',
+            lineHeight:1.35, transition:'all .15s' }}>
+          <span>{en}</span>
+          <span style={{ fontFamily:'Noto Serif JP,serif', fontSize:9, opacity:.55 }}>{jp}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FilterList({ active, onChange }) {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:1 }}>
+      {TABS.map(([en, jp, key]) => (
+        <button key={key} onClick={() => onChange(key)}
+          style={{ padding:'9px 14px', border:'none',
+            borderLeft:`3px solid ${active === key ? T.torii : 'transparent'}`,
+            background: active === key ? T.subtle : 'transparent',
+            color: active === key ? T.torii : T.wood,
+            fontFamily:'Outfit,sans-serif', fontSize:12,
+            fontWeight: active === key ? 600 : 400,
+            cursor:'pointer', textAlign:'left',
+            display:'flex', justifyContent:'space-between', alignItems:'center',
+            borderRadius:'0 6px 6px 0', transition:'all .15s' }}>
+          <span>{en}</span>
+          <span style={{ fontFamily:'Noto Serif JP,serif', fontSize:10, opacity:.42 }}>{jp}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ZoomCtrl({ onIn, onOut, onReset }) {
+  const btns = [['＋', onIn, 17, T.ink], ['－', onOut, 17, T.ink], ['⌖', onReset, 13, T.torii]];
+  return (
+    <div style={{ display:'flex', flexDirection:'column', borderRadius:10, overflow:'hidden',
+      border:`1px solid ${T.border}`, background:T.glass, backdropFilter:'blur(14px)',
+      boxShadow:'0 4px 24px rgba(0,0,0,.1)' }}>
+      {btns.map(([ic, fn, sz, col], i) => (
+        <React.Fragment key={i}>
+          {i > 0 && <div style={{ height:1, background:T.border }} />}
+          <button onClick={fn}
+            style={{ width:38, height:38, border:'none', background:'transparent',
+              color:col, fontSize:sz, fontWeight:300, cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center' }}>{ic}</button>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+function Legend() {
+  return (
+    <div style={{ background:T.glass, backdropFilter:'blur(14px)',
+      border:`1px solid ${T.border}`, borderRadius:10,
+      padding:'9px 16px', display:'flex', alignItems:'center', gap:10 }}>
+      <span style={{ fontFamily:'Outfit,sans-serif', fontSize:9, fontWeight:500,
+        letterSpacing:'.15em', textTransform:'uppercase', color:T.wood }}>Density</span>
+      <span style={{ fontFamily:'Outfit,sans-serif', fontSize:9, color:T.wood }}>Low</span>
+      <div style={{ width:88, height:7, borderRadius:100, background:GRAD }} />
+      <span style={{ fontFamily:'Outfit,sans-serif', fontSize:9, color:T.wood }}>High</span>
+    </div>
+  );
+}
+
+function StatsCard({ count }) {
+  return (
+    <div style={{ background:T.glass, backdropFilter:'blur(14px)',
+      border:`1px solid ${T.border}`, borderRadius:10, padding:'12px 18px' }}>
+      <div style={{ fontFamily:'Spectral,serif', fontWeight:600, fontSize:28,
+        color:T.ink, lineHeight:1 }}>{formatNum(count)}</div>
+      <div style={{ fontFamily:'Outfit,sans-serif', fontSize:9, fontWeight:500,
+        color:T.wood, letterSpacing:'.12em', textTransform:'uppercase',
+        marginTop:4 }}>positions recorded</div>
+    </div>
+  );
+}
+
+function RefreshBtn({ onClick, loading }) {
+  return (
+    <button onClick={onClick} disabled={loading}
+      style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 18px',
+        border:`1.5px solid ${T.border}`, borderRadius:9,
+        background:'rgba(255,255,255,.9)', color:T.ink,
+        fontFamily:'Outfit,sans-serif', fontSize:13, fontWeight:500,
+        cursor: loading ? 'not-allowed' : 'pointer',
+        backdropFilter:'blur(8px)', opacity: loading ? 0.6 : 1,
+        transition:'filter .12s' }}>
+      <span style={{ display:'inline-block',
+        animation: loading ? 'spin .8s linear infinite' : 'none' }}>↻</span>
+      <span>{loading ? 'Loading…' : 'Refresh'}</span>
+    </button>
+  );
+}
+
+function Sidebar({ open, onClose, active, onChange, count, onRefresh, loading }) {
+  const LBL = { fontFamily:'Outfit,sans-serif', fontSize:9, fontWeight:600,
+    letterSpacing:'.18em', textTransform:'uppercase', color:T.wood, marginBottom:10 };
+  return (
+    <div style={{ position:'absolute', top:0, left:0, bottom:0,
+      width: open ? 300 : 0, overflow:'hidden', zIndex:20,
+      transition:'width .28s cubic-bezier(.4,0,.2,1)',
+      boxShadow: open ? '4px 0 40px rgba(0,0,0,.18)' : 'none' }}>
+      <div style={{ width:300, height:'100%', display:'flex',
+        flexDirection:'column', position:'relative' }}>
+        {/* Pagoda photo */}
+        <div style={{ position:'absolute', inset:0,
+          background:"url('./pagoda-bg.jpg') 68% 22%/cover no-repeat" }} />
+        {/* Warm cream overlay */}
+        <div style={{ position:'absolute', inset:0, background:'rgba(252,246,238,0.82)' }} />
+        {/* Content */}
+        <div style={{ position:'relative', zIndex:1, display:'flex',
+          flexDirection:'column', height:'100%', overflowY:'auto' }}>
+          {/* Close button zone */}
+          <div style={{ height:72, display:'flex', alignItems:'center',
+            justifyContent:'flex-end', padding:'0 16px', flexShrink:0 }}>
+            <button onClick={onClose}
+              style={{ width:32, height:32, borderRadius:7,
+                border:`1.5px solid ${T.border}`,
+                background:'rgba(255,252,248,0.9)', color:T.ink,
+                fontSize:15, cursor:'pointer',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                backdropFilter:'blur(8px)', transition:'filter .12s' }}>←</button>
+          </div>
+          <div style={{ height:1, background:'rgba(197,68,44,0.18)', margin:'0 20px' }} />
+          {/* Time Range */}
+          <div style={{ padding:'14px 20px' }}>
+            <div style={LBL}>Time Range</div>
+            <FilterList active={active} onChange={onChange} />
+          </div>
+          <div style={{ height:1, background:'rgba(197,68,44,0.18)', margin:'0 20px' }} />
+          {/* Activity */}
+          <div style={{ padding:'14px 20px' }}>
+            <div style={LBL}>Activity</div>
+            <div style={{ fontFamily:'Spectral,serif', fontWeight:600, fontSize:32,
+              color:T.ink, lineHeight:1 }}>{formatNum(count)}</div>
+            <div style={{ fontFamily:'Outfit,sans-serif', fontSize:10, color:T.wood,
+              letterSpacing:'.08em', textTransform:'uppercase',
+              marginTop:5 }}>positions recorded</div>
+          </div>
+          <div style={{ height:1, background:'rgba(197,68,44,0.18)', margin:'0 20px' }} />
+          {/* Heat Density */}
+          <div style={{ padding:'14px 20px' }}>
+            <div style={LBL}>Heat Density</div>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <span style={{ fontFamily:'Outfit,sans-serif', fontSize:9, color:T.wood }}>Low</span>
+              <div style={{ flex:1, height:8, borderRadius:100, background:GRAD }} />
+              <span style={{ fontFamily:'Outfit,sans-serif', fontSize:9, color:T.wood }}>High</span>
+            </div>
+          </div>
+          <div style={{ flex:1 }} />
+          <div style={{ padding:'12px 20px 22px',
+            borderTop:'1px solid rgba(197,68,44,0.18)' }}>
+            <RefreshBtn onClick={onRefresh} loading={loading} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Falling sakura petals ───────────────────────────────── */
+const PETALS = [
+  { left:'3%',  dur:24, delay:0  }, { left:'10%', dur:31, delay:7  },
+  { left:'18%', dur:27, delay:3  }, { left:'26%', dur:34, delay:11 },
+  { left:'34%', dur:28, delay:5  }, { left:'43%', dur:23, delay:18 },
+  { left:'51%', dur:30, delay:1  }, { left:'59%', dur:26, delay:14 },
+  { left:'67%', dur:33, delay:9  }, { left:'76%', dur:25, delay:22 },
+  { left:'84%', dur:29, delay:4  }, { left:'91%', dur:36, delay:16 },
+  { left:'97%', dur:22, delay:8  },
+];
+
+function Petals() {
+  return (
+    <div style={{ position:'fixed', inset:0, pointerEvents:'none', zIndex:6, overflow:'hidden' }}>
+      {PETALS.map((p, i) => (
+        <div key={i} style={{
+          position:'absolute', top:-16, left:p.left,
+          width:9, height:13,
+          borderRadius:'80% 20% 72% 28% / 55% 38% 62% 45%',
+          background:'linear-gradient(135deg,rgb(255,218,230),rgb(255,140,172))',
+          animation:`petalFall ${p.dur}s ease-in infinite`,
+          animationDelay:`${p.delay}s`,
+        }} />
+      ))}
+    </div>
+  );
+}
+
+/* ── App ─────────────────────────────────────────────────── */
+function App() {
+  const shellRef  = useRef(null);
+  const innerRef  = useRef(null);
+  const canvasRef = useRef(null);
+  const zoomRef   = useRef(1);
+  const txRef     = useRef(0);
+  const tyRef     = useRef(0);
+  const dragRef   = useRef({ active:false, startX:0, startY:0, startTx:0, startTy:0 });
+
+  const [activeFilter, setActiveFilter] = useState('day');
+  const [sidebarOpen, setSidebarOpen]   = useState(false);
+  const [totalCount, setTotalCount]     = useState(0);
+  const [status, setStatus]             = useState('loading');
+  const [errorMsg, setErrorMsg]         = useState('');
+
+  /* Center map before first paint */
+  useLayoutEffect(() => {
+    const shell = shellRef.current;
+    const inner = innerRef.current;
+    if (!shell || !inner) return;
+    const W = shell.offsetWidth, H = shell.offsetHeight, D = inner.offsetWidth;
+    const tx = (W - D) / 2, ty = (H - D) / 2;
+    txRef.current = tx; tyRef.current = ty;
+    inner.style.transform = `translate(${tx}px,${ty}px) scale(1)`;
+  }, []);
+
+  /* Non-passive wheel zoom */
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      const z0 = zoomRef.current;
+      const newZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z0 * factor));
+      const rect = shell.getBoundingClientRect();
+      const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+      const rawTx = cx - (cx - txRef.current) * (newZ / z0);
+      const rawTy = cy - (cy - tyRef.current) * (newZ / z0);
+      const inner = innerRef.current;
+      if (!inner) return;
+      const W = shell.offsetWidth, H = shell.offsetHeight, D = inner.offsetWidth;
+      const Dz = D * newZ;
+      const clx = clampAxis(rawTx, W, Dz);
+      const cly = clampAxis(rawTy, H, Dz);
+      zoomRef.current = newZ; txRef.current = clx; tyRef.current = cly;
+      inner.style.transform = `translate(${clx}px,${cly}px) scale(${newZ})`;
+    };
+    shell.addEventListener('wheel', onWheel, { passive: false });
+    return () => shell.removeEventListener('wheel', onWheel);
+  }, []);
+
+  /* Pointer drag handlers */
+  const onPointerDown = useCallback((e) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.currentTarget.style.cursor = 'grabbing';
+    dragRef.current = { active:true, startX:e.clientX, startY:e.clientY,
+      startTx:txRef.current, startTy:tyRef.current };
+  }, []);
+
+  const onPointerMove = useCallback((e) => {
+    if (!dragRef.current.active) return;
+    const z = zoomRef.current;
+    const rawTx = dragRef.current.startTx + (e.clientX - dragRef.current.startX);
+    const rawTy = dragRef.current.startTy + (e.clientY - dragRef.current.startY);
+    const shell = shellRef.current, inner = innerRef.current;
+    if (!shell || !inner) return;
+    const W = shell.offsetWidth, H = shell.offsetHeight, D = inner.offsetWidth;
+    const Dz = D * z;
+    const clx = clampAxis(rawTx, W, Dz);
+    const cly = clampAxis(rawTy, H, Dz);
+    txRef.current = clx; tyRef.current = cly;
+    inner.style.transform = `translate(${clx}px,${cly}px) scale(${z})`;
+  }, []);
+
+  const onPointerUp = useCallback((e) => {
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    e.currentTarget.style.cursor = 'grab';
+    dragRef.current.active = false;
+  }, []);
+
+  /* Zoom button helpers */
+  const zoomAtCenter = useCallback((factor) => {
+    const shell = shellRef.current, inner = innerRef.current;
+    if (!shell || !inner) return;
+    const z0 = zoomRef.current;
+    const newZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z0 * factor));
+    const cx = shell.offsetWidth / 2, cy = shell.offsetHeight / 2;
+    const rawTx = cx - (cx - txRef.current) * (newZ / z0);
+    const rawTy = cy - (cy - tyRef.current) * (newZ / z0);
+    const W = shell.offsetWidth, H = shell.offsetHeight, D = inner.offsetWidth;
+    const Dz = D * newZ;
+    const clx = clampAxis(rawTx, W, Dz);
+    const cly = clampAxis(rawTy, H, Dz);
+    zoomRef.current = newZ; txRef.current = clx; tyRef.current = cly;
+    inner.style.transform = `translate(${clx}px,${cly}px) scale(${newZ})`;
+  }, []);
+
+  const zoomIn  = useCallback(() => zoomAtCenter(1.5), [zoomAtCenter]);
+  const zoomOut = useCallback(() => zoomAtCenter(1 / 1.5), [zoomAtCenter]);
+  const resetZoom = useCallback(() => {
+    const shell = shellRef.current, inner = innerRef.current;
+    if (!shell || !inner) return;
+    const W = shell.offsetWidth, H = shell.offsetHeight, D = inner.offsetWidth;
+    zoomRef.current = 1;
+    txRef.current = (W - D) / 2;
+    tyRef.current = (H - D) / 2;
+    inner.style.transform = `translate(${txRef.current}px,${tyRef.current}px) scale(1)`;
+  }, []);
+
+  /* Fetch */
+  const fetchHeatmap = useCallback(async () => {
+    setStatus('loading');
+    setErrorMsg('');
+    try {
+      const url = activeFilter === 'day'
+        ? HEATMAP_URL
+        : `${HEATMAP_URL}?range=${activeFilter}`;
+      const res = await fetch(url, { cache:'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data || !Array.isArray(data.grid)) throw new Error('Malformed response');
+      const total = drawHeatmap(canvasRef.current, data.grid);
+      setTotalCount(total);
+      setStatus('ready');
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err.message || 'Unknown error');
+      setStatus('error');
+    }
+  }, [activeFilter]);
+
+  useEffect(() => { fetchHeatmap(); }, [fetchHeatmap]);
+
+  const loading = status === 'loading';
+
+  return (
+    <div ref={shellRef} style={{ position:'relative', width:'100vw', height:'100vh',
+      overflow:'hidden', background:'#2a3f4f' }}>
+
+      {/* Draggable map layer */}
+      <div ref={innerRef}
+        style={{ position:'absolute', top:0, left:0,
+          width:'max(100vw,100vh)', height:'max(100vw,100vh)',
+          transformOrigin:'0 0', willChange:'transform', cursor:'grab',
+          background:"url('./japan-map.jpg') center/cover no-repeat" }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}>
+        {/* Heatmap canvas — no CSS filter, 6144×6144 intrinsic */}
+        <canvas ref={canvasRef} width={MAP_SIZE} height={MAP_SIZE}
+          style={{ position:'absolute', inset:0, width:'100%', height:'100%',
+            mixBlendMode:'screen', pointerEvents:'none',
+            opacity: status === 'ready' ? 1 : 0, transition:'opacity .4s' }}
+          aria-hidden="true" />
+        {/* Sakura atmosphere */}
+        <div style={{ position:'absolute', inset:0, pointerEvents:'none', background:`
+          radial-gradient(ellipse 62% 55% at 0% 0%,rgba(255,192,203,.11),transparent 55%),
+          radial-gradient(ellipse 55% 50% at 100% 0%,rgba(255,192,203,.09),transparent 55%),
+          radial-gradient(ellipse 80% 35% at 50% 100%,rgba(255,210,175,.07),transparent 60%)
+        `}} />
+      </div>
+
+      {/* Sakura petals */}
+      <Petals />
+
+      {/* Washi top fade */}
+      <div style={{ position:'absolute', top:0, left:0, right:0, height:130,
+        background:'linear-gradient(to bottom,rgba(250,248,243,.65),transparent)',
+        pointerEvents:'none', zIndex:4 }} />
+
+      {/* Collapsible sidebar */}
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)}
+        active={activeFilter} onChange={setActiveFilter}
+        count={totalCount} onRefresh={fetchHeatmap} loading={loading} />
+
+      {/* Top bar */}
+      <div style={{ position:'absolute', top:0, left:0, right:0, padding:'18px 24px',
+        display:'flex', alignItems:'center', gap:16, zIndex:10 }}>
+        <button onClick={() => setSidebarOpen(o => !o)}
+          style={{ width:44, height:44, border:`1.5px solid ${T.border}`, borderRadius:10,
+            background:'rgba(255,255,255,.9)', color:T.ink, fontSize:19, cursor:'pointer',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            backdropFilter:'blur(10px)', flexShrink:0, transition:'filter .12s' }}
+          title={sidebarOpen ? 'Close panel' : 'Open panel'}>
+          {sidebarOpen ? '←' : '☰'}
+        </button>
+        <Wordmark />
+        <div style={{ flex:1 }} />
+        <FilterPills active={activeFilter} onChange={setActiveFilter} />
+        <RefreshBtn onClick={fetchHeatmap} loading={loading} />
+      </div>
+
+      {/* Bottom-left HUD: stats + legend when sidebar closed */}
+      {!sidebarOpen && (
+        <div style={{ position:'absolute', bottom:28, left:28,
+          display:'flex', flexDirection:'column', gap:10, zIndex:5 }}>
+          <StatsCard count={totalCount} />
+          <Legend />
+        </div>
+      )}
+      {/* Legend only, shifted right of sidebar when open */}
+      {sidebarOpen && (
+        <div style={{ position:'absolute', bottom:28, left:320, zIndex:5 }}>
+          <Legend />
+        </div>
+      )}
+
+      {/* Zoom controls — always bottom-right */}
+      <div style={{ position:'absolute', bottom:28, right:28, zIndex:5 }}>
+        <ZoomCtrl onIn={zoomIn} onOut={zoomOut} onReset={resetZoom} />
+      </div>
+
+      {/* Pan hint */}
+      <div style={{ position:'absolute', bottom:10, left:'50%',
+        transform:'translateX(-50%)', zIndex:4,
+        fontFamily:'Outfit,sans-serif', fontSize:9, letterSpacing:'.1em',
+        textTransform:'uppercase', color:'rgba(255,255,255,0.38)',
+        pointerEvents:'none', whiteSpace:'nowrap' }}>
+        drag to pan · scroll to zoom
+      </div>
+
+      {/* Loading overlay */}
+      {loading && (
+        <div style={{ position:'absolute', inset:0, zIndex:30,
+          display:'flex', alignItems:'center', justifyContent:'center',
+          pointerEvents:'none' }}>
+          <div style={{ background:T.glass, backdropFilter:'blur(14px)',
+            border:`1px solid ${T.border}`, borderRadius:10,
+            padding:'18px 28px', display:'flex', alignItems:'center', gap:12 }}>
+            <div style={{ width:14, height:14, border:`2px solid ${T.border}`,
+              borderTopColor:T.torii, borderRadius:'50%',
+              animation:'spin .8s linear infinite' }} />
+            <span style={{ fontFamily:'Outfit,sans-serif', fontSize:11, fontWeight:500,
+              color:T.wood, letterSpacing:'.12em', textTransform:'uppercase' }}>
+              Loading telemetry</span>
+          </div>
+        </div>
+      )}
+
+      {/* Error overlay */}
+      {status === 'error' && (
+        <div style={{ position:'absolute', inset:0, zIndex:30,
+          display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:T.glass, backdropFilter:'blur(14px)',
+            border:`1px solid ${T.border}`, borderRadius:10,
+            padding:'24px 32px', textAlign:'center', maxWidth:320 }}>
+            <div style={{ fontFamily:'Spectral,serif', fontWeight:600, fontSize:18,
+              color:T.ink, marginBottom:8 }}>Signal lost</div>
+            <div style={{ fontFamily:'Outfit,sans-serif', fontSize:11,
+              color:T.wood, marginBottom:16 }}>{errorMsg}</div>
+            <RefreshBtn onClick={fetchHeatmap} loading={false} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
