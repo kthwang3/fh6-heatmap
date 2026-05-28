@@ -3,7 +3,30 @@ import socket
 import time
 import uuid
 import requests
+import asyncio
+import json
+import websockets
 from collections import namedtuple
+
+#Livemap feature: broadcast position on every packet
+clients = set()
+
+async def ws_handler(websocket):
+  clients.add(websocket)
+  try:
+    await websocket.wait_closed()
+  finally:
+    clients.remove(websocket)
+
+async def broadcast(x, z, speed):
+  if not clients:
+    return
+  message = json.dumps({"x": x, "z": z, "speed": round(speed * 3.6, 1)})
+  #make a copy to prevent runtime error if ws_handler closes client
+  for client in clients.copy():
+    #send json string over the WebSocket connection to that browser tab
+    await client.send(message)
+
 
 FMT = '<iIfff' + 'f' * 24 + 'i' * 8 + 'f' * 16 + 'i' * 5  + 'I' + 'f' * 19 + 'H' + 'B' * 6 + 'bbbx'
 FIELDS = (
@@ -50,7 +73,7 @@ def parse(data: bytes) -> Packet:
   values = struct.unpack(FMT, data)
   return Packet(*values)
 
-def listen(port=5301):
+def udp_loop(event_loop, port=5301):
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   sock.bind(('', port))
   print(f'Listening on UDP port {port}...')
@@ -74,6 +97,7 @@ def listen(port=5301):
     if not pkt.IsRaceOn:
       continue
 
+    asyncio.run_coroutine_threadsafe(broadcast(pkt.PositionX, pkt.PositionZ, pkt.Speed), event_loop)
     last_x, last_z = last_pos
     if time.time() - last_time >= 5 or (((last_x - pkt.PositionX)**2 + (last_z - pkt.PositionZ)**2)**0.5) >= 50:
       last_time = time.time()
@@ -85,7 +109,17 @@ def listen(port=5301):
       requests.post(url, json={'timestamp': timestamp, 'session_id': str(my_uuid), 'x_pos': pkt.PositionX, 'z_pos': pkt.PositionZ})
       print(f'X={pkt.PositionX:10.1f} Z={pkt.PositionZ:10.1f} speed={pkt.Speed * 3.6:.1f} km/h')
 
+# 1. Start websocket server -> browsers
+# 2. Launch udp_loop in a background threat -> FH6 packets
+async def main():
+  event_loop = asyncio.get_running_loop()
+  websocket_server = await websockets.serve(ws_handler, 'localhost', 8765)
+  # keep main alive and run udp_loop in background of event_loop
+  await event_loop.run_in_executor(None, udp_loop, event_loop)
+  websocket_server.close()
+
 if __name__ == '__main__':
-  listen()
+  # create an event loop that runs infinitely
+  asyncio.run(main())
 
 
