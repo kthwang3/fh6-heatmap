@@ -38,7 +38,7 @@ const { useState, useRef, useEffect, useLayoutEffect, useCallback } = React;
 /* ── Constants ───────────────────────────────────────────── */
 const HEATMAP_URL = 'https://s60170byjh.execute-api.us-east-1.amazonaws.com/prod/heatmap';
 const MAP_SIZE  = 6144;
-const GRID_SIZE = 100;
+const GRID_SIZE = 200;
 const CELL_PX   = MAP_SIZE / GRID_SIZE;
 const MIN_ZOOM  = 0.5;
 const MAX_ZOOM  = 5;
@@ -54,7 +54,7 @@ const T = {
   glass:  'rgba(250,248,243,0.9)',
 };
 const GRAD = 'linear-gradient(to right,rgba(109,40,217,.6),rgba(219,39,119,.78),rgba(249,115,22,.92),rgba(255,220,160,1))';
-const TABS = [['Today','今日','day'],['Week','週間','week'],['Month','月間','month']];
+const TABS = [['All Time','全期間','all'],['Week','週間','week'],['Month','月間','month']];
 
 /* ── Zoom/pan clamp helper ───────────────────────────────── */
 function clampAxis(nval, viewDim, scaledDim) {
@@ -90,14 +90,19 @@ function drawHeatmap(canvas, grid) {
   canvas.height = MAP_SIZE;
   ctx.clearRect(0, 0, MAP_SIZE, MAP_SIZE);
   let max = 0, total = 0;
-  for (const row of grid) for (const v of row) { if (v > max) max = v; total += v; }
+  for (const row of grid) {
+    for (const visitCount of row) {
+      if (visitCount > max) max = visitCount;
+      total += visitCount;
+    }
+  }
   if (max === 0) return 0;
   ctx.globalCompositeOperation = 'lighter';
   for (let r = 0; r < grid.length; r++) {
     for (let c = 0; c < grid[r].length; c++) {
-      const v = grid[r][c];
-      if (v === 0) continue;
-      const density = v / max;
+      const visitCount = grid[r][c];
+      if (visitCount === 0) continue;
+      const density = visitCount / max;
       const { r: cr, g: cg, b: cb } = intensityColor(density);
       const alpha = Math.min(0.1 + density * 0.52, 0.74);
       const x  = c * CELL_PX;
@@ -350,7 +355,7 @@ function App() {
   const tyRef     = useRef(0);
   const dragRef   = useRef({ active:false, startX:0, startY:0, startTx:0, startTy:0 });
 
-  const [activeFilter, setActiveFilter] = useState('day');
+  const [activeFilter, setActiveFilter] = useState('all');
   const [sidebarOpen, setSidebarOpen]   = useState(false);
   const [totalCount, setTotalCount]     = useState(0);
   const [status, setStatus]             = useState('loading');
@@ -456,7 +461,7 @@ function App() {
     setStatus('loading');
     setErrorMsg('');
     try {
-      const url = activeFilter === 'day'
+      const url = activeFilter === 'all'
         ? HEATMAP_URL
         : `${HEATMAP_URL}?range=${activeFilter}`;
       const res = await fetch(url, { cache:'no-store' });
