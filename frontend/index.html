@@ -55,6 +55,7 @@ const T = {
 };
 const GRAD = 'linear-gradient(to right,rgba(109,40,217,.6),rgba(219,39,119,.78),rgba(249,115,22,.92),rgba(255,220,160,1))';
 const TABS = [['All Time','全期間','all'],['Week','週間','week'],['Month','月間','month']];
+const CLASS_LABELS = ['D', 'C', 'B', 'A', 'S1', 'S2', 'X'];
 
 /* ── Zoom/pan clamp helper ───────────────────────────────── */
 function clampAxis(nval, viewDim, scaledDim) {
@@ -345,6 +346,58 @@ function Petals() {
   );
 }
 
+/* ── Car popup ───────────────────────────────────────────── */
+function CarPopup({ cars, x, y, onClose }) {
+  return (
+    <div style={{ position:'fixed', left:x, top:y, zIndex:50,
+      background:T.glass, backdropFilter:'blur(14px)',
+      border:`1px solid ${T.border}`, borderRadius:10,
+      padding:'12px 14px', minWidth:230, maxWidth:290,
+      boxShadow:'0 8px 32px rgba(0,0,0,0.22)' }}>
+      <div style={{ display:'flex', justifyContent:'space-between',
+        alignItems:'center', marginBottom:10 }}>
+        <span style={{ fontFamily:'Outfit,sans-serif', fontSize:9, fontWeight:600,
+          letterSpacing:'.18em', textTransform:'uppercase', color:T.wood }}>
+          Cars Driven Here
+        </span>
+        <button onClick={onClose} style={{ background:'none', border:'none',
+          cursor:'pointer', color:T.wood, fontSize:16, lineHeight:1,
+          padding:'0 2px', display:'flex', alignItems:'center' }}>×</button>
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+        {cars.map(function(car) {
+          let classLabel;
+          if (CLASS_LABELS[car.carClass] !== undefined) {
+            classLabel = CLASS_LABELS[car.carClass];
+          } else {
+            classLabel = '?';
+          }
+          return (
+            <div key={car.ordinal} style={{ display:'flex', alignItems:'center',
+              gap:8, padding:'6px 8px', borderRadius:6,
+              background:'rgba(255,255,255,0.55)', border:`1px solid ${T.border}` }}>
+              <div style={{ width:26, height:18, borderRadius:4, background:T.torii,
+                display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                <span style={{ fontFamily:'Outfit,sans-serif', fontSize:8,
+                  fontWeight:700, color:'#fff' }}>{classLabel}</span>
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontFamily:'Outfit,sans-serif', fontSize:11, fontWeight:500,
+                  color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {car.name}
+                </div>
+                <div style={{ fontFamily:'Outfit,sans-serif', fontSize:9, color:T.wood, marginTop:1 }}>
+                  PI {car.performanceIndex} · {car.count}×
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ── App ─────────────────────────────────────────────────── */
 function App() {
   const shellRef  = useRef(null);
@@ -353,13 +406,17 @@ function App() {
   const zoomRef   = useRef(1);
   const txRef     = useRef(0);
   const tyRef     = useRef(0);
-  const dragRef   = useRef({ active:false, startX:0, startY:0, startTx:0, startTy:0 });
+  const dragRef        = useRef({ active:false, hasMoved:false, startX:0, startY:0, startTx:0, startTy:0 });
+  const carOrdinalsRef = useRef({});
+  const carGridRef     = useRef(null);
+  const gridRef        = useRef(null);
 
   const [activeFilter, setActiveFilter] = useState('all');
   const [sidebarOpen, setSidebarOpen]   = useState(false);
   const [totalCount, setTotalCount]     = useState(0);
   const [status, setStatus]             = useState('loading');
   const [errorMsg, setErrorMsg]         = useState('');
+  const [popupState, setPopupState]     = useState({ visible:false, x:0, y:0, cars:[] });
 
   /* Center map before first paint */
   useLayoutEffect(() => {
@@ -370,6 +427,74 @@ function App() {
     const tx = (W - D) / 2, ty = (H - D) / 2;
     txRef.current = tx; tyRef.current = ty;
     inner.style.transform = `translate(${tx}px,${ty}px) scale(1)`;
+  }, []);
+
+  /* Load car ordinals lookup */
+  useEffect(function() {
+    fetch('./car-ordinals.json')
+      .then(function(response) { return response.json(); })
+      .then(function(data) { carOrdinalsRef.current = data; })
+      .catch(function(error) { console.error('Failed to load car ordinals:', error); });
+  }, []);
+
+  /* Handle click on map — show car popup for cells with heat */
+  const handleMapClick = useCallback(function(clientX, clientY) {
+    const inner = innerRef.current;
+    if (!inner) return;
+    const tx = txRef.current;
+    const ty = tyRef.current;
+    const zoom = zoomRef.current;
+    const displaySize = inner.offsetWidth;
+    const col = Math.floor(((clientX - tx) / zoom) * GRID_SIZE / displaySize);
+    const row = Math.floor(((clientY - ty) / zoom) * GRID_SIZE / displaySize);
+    if (col < 0 || col >= GRID_SIZE || row < 0 || row >= GRID_SIZE) {
+      setPopupState({ visible:false, x:0, y:0, cars:[] });
+      return;
+    }
+    const currentGrid = gridRef.current;
+    const currentCarGrid = carGridRef.current;
+    if (!currentGrid || !currentCarGrid || currentGrid[row][col] === 0) {
+      setPopupState({ visible:false, x:0, y:0, cars:[] });
+      return;
+    }
+    const cellCars = currentCarGrid[row][col];
+    const ordinals = Object.keys(cellCars);
+    if (ordinals.length === 0) {
+      setPopupState({ visible:false, x:0, y:0, cars:[] });
+      return;
+    }
+    ordinals.sort(function(ordinalA, ordinalB) {
+      return cellCars[ordinalB].count - cellCars[ordinalA].count;
+    });
+    const carOrdinalsData = carOrdinalsRef.current;
+    const carList = [];
+    for (let index = 0; index < ordinals.length; index++) {
+      const ordinal = ordinals[index];
+      const carName = carOrdinalsData[ordinal];
+      if (!carName) continue;
+      const carData = cellCars[ordinal];
+      carList.push({
+        ordinal: ordinal,
+        name: carName,
+        carClass: carData.car_class,
+        performanceIndex: carData.car_performance_index,
+        count: carData.count,
+      });
+      if (carList.length >= 5) break;
+    }
+    if (carList.length === 0) {
+      setPopupState({ visible:false, x:0, y:0, cars:[] });
+      return;
+    }
+    let popupX = clientX + 16;
+    if (popupX + 300 > window.innerWidth) {
+      popupX = clientX - 316;
+    }
+    let popupY = clientY;
+    if (popupY + 260 > window.innerHeight) {
+      popupY = window.innerHeight - 260;
+    }
+    setPopupState({ visible:true, x:popupX, y:popupY, cars:carList });
   }, []);
 
   /* Non-passive wheel zoom */
@@ -402,15 +527,20 @@ function App() {
   const onPointerDown = useCallback((e) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     e.currentTarget.style.cursor = 'grabbing';
-    dragRef.current = { active:true, startX:e.clientX, startY:e.clientY,
+    dragRef.current = { active:true, hasMoved:false, startX:e.clientX, startY:e.clientY,
       startTx:txRef.current, startTy:tyRef.current };
   }, []);
 
   const onPointerMove = useCallback((e) => {
     if (!dragRef.current.active) return;
+    const deltaX = e.clientX - dragRef.current.startX;
+    const deltaY = e.clientY - dragRef.current.startY;
+    if (deltaX * deltaX + deltaY * deltaY > 25) {
+      dragRef.current.hasMoved = true;
+    }
     const z = zoomRef.current;
-    const rawTx = dragRef.current.startTx + (e.clientX - dragRef.current.startX);
-    const rawTy = dragRef.current.startTy + (e.clientY - dragRef.current.startY);
+    const rawTx = dragRef.current.startTx + deltaX;
+    const rawTy = dragRef.current.startTy + deltaY;
     const shell = shellRef.current, inner = innerRef.current;
     if (!shell || !inner) return;
     const W = shell.offsetWidth, H = shell.offsetHeight, D = inner.offsetWidth;
@@ -424,7 +554,11 @@ function App() {
   const onPointerUp = useCallback((e) => {
     e.currentTarget.releasePointerCapture(e.pointerId);
     e.currentTarget.style.cursor = 'grab';
+    const wasDragging = dragRef.current.hasMoved;
     dragRef.current.active = false;
+    if (!wasDragging) {
+      handleMapClick(e.clientX, e.clientY);
+    }
   }, []);
 
   /* Zoom button helpers */
@@ -468,6 +602,8 @@ function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (!data || !Array.isArray(data.grid)) throw new Error('Malformed response');
+      gridRef.current = data.grid;
+      carGridRef.current = data.car_grid || null;
       const total = drawHeatmap(canvasRef.current, data.grid);
       setTotalCount(total);
       setStatus('ready');
@@ -559,6 +695,16 @@ function App() {
       <div style={{ position:'absolute', bottom:28, right:28, zIndex:5 }}>
         <ZoomCtrl onIn={zoomIn} onOut={zoomOut} onReset={resetZoom} />
       </div>
+
+      {/* Car popup */}
+      {popupState.visible && (
+        <CarPopup
+          cars={popupState.cars}
+          x={popupState.x}
+          y={popupState.y}
+          onClose={function() { setPopupState({ visible:false, x:0, y:0, cars:[] }); }}
+        />
+      )}
 
       {/* Pan hint */}
       <div style={{ position:'absolute', bottom:10, left:'50%',

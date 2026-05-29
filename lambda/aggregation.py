@@ -43,17 +43,28 @@ def handler(event, context):
     filtered_items = items
   
   grid = [[0] * GRID_W for _ in range(GRID_H)]
+  car_grid = [[{} for _ in range(GRID_W)] for _ in range(GRID_H)]
 
   for item in filtered_items:
+    #change back from Decimal
     x = float(item['x_pos'])
     z = float(item['z_pos'])
+    if 'car_ordinal' not in item:
+      continue
+    car_ordinal = int(item['car_ordinal'])
+    car_class = int(item['car_class'])
+    car_performance_index = int(item['car_performance_index'])
     col = int((x / FACTOR_X + OFFSET_X) / IMAGE_SIZE * GRID_W)
     row = int((z / FACTOR_Y + OFFSET_Y) / IMAGE_SIZE * GRID_H)
     if 0 <= col < GRID_W and 0 <= row < GRID_H:
       grid[row][col] += 1
+      if car_ordinal not in car_grid[row][col]:
+        car_grid[row][col][car_ordinal] = {'count': 1, 'car_class': car_class, 'car_performance_index': car_performance_index}
+      else:
+        car_grid[row][col][car_ordinal]['count'] += 1
   
   return {
     'statusCode': 200,
     'headers':{'Access-Control-Allow-Origin': '*'},
-    'body': json.dumps({'grid': grid})
+    'body': json.dumps({'grid': grid, 'car_grid': car_grid})
   }

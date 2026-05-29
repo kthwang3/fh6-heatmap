@@ -26,6 +26,8 @@ resource "aws_lambda_function" "lambda_function" {
   handler = "main.handler"
   filename = "../lambda.zip"
   role = aws_iam_role.lambda_role.arn
+  source_code_hash = filebase64sha256("../lambda.zip")
+
 }
 resource "aws_lambda_function" "lambda_aggregate"{
   function_name = "fh6-lambda-aggregate"
@@ -34,6 +36,8 @@ resource "aws_lambda_function" "lambda_aggregate"{
   filename = "../lambda.zip"
   role = aws_iam_role.lambda_role.arn
   timeout = 30
+  source_code_hash = filebase64sha256("../lambda.zip")
+
 }
 resource "aws_lambda_permission" "allow_api_gateway" {
   statement_id = "AllowAPIGatewayInvoke"

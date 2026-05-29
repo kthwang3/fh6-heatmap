@@ -9,6 +9,9 @@ def handler(event, context):
     session_id = eventDict['session_id']
     x_pos = Decimal(str(eventDict['x_pos']))
     z_pos = Decimal(str(eventDict['z_pos']))
+    car_ordinal = eventDict['car_ordinal']
+    car_class = eventDict['car_class']
+    car_performance_index = eventDict['car_performance_index']
 
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table('fh6-heatmap-table')
@@ -18,7 +21,10 @@ def handler(event, context):
         'sessionId': session_id,
         'timestamp': timestamp,
         'x_pos': x_pos,
-        'z_pos': z_pos
+        'z_pos': z_pos,
+        'car_ordinal': car_ordinal,
+        'car_class': car_class,
+        'car_performance_index': car_performance_index
       }
     )
     return {

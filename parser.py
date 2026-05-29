@@ -106,7 +106,7 @@ def udp_loop(event_loop, port=5301):
       url = 'https://s60170byjh.execute-api.us-east-1.amazonaws.com/prod/position'
 
       #POST to API Gateway URL
-      requests.post(url, json={'timestamp': timestamp, 'session_id': str(my_uuid), 'x_pos': pkt.PositionX, 'z_pos': pkt.PositionZ})
+      requests.post(url, json={'timestamp': timestamp, 'session_id': str(my_uuid), 'x_pos': pkt.PositionX, 'z_pos': pkt.PositionZ, 'car_ordinal': pkt.CarOrdinal, 'car_class': pkt.CarClass, 'car_performance_index': pkt.CarPerformanceIndex})
       print(f'X={pkt.PositionX:10.1f} Z={pkt.PositionZ:10.1f} speed={pkt.Speed * 3.6:.1f} km/h')
 
 # 1. Start websocket server -> browsers

@@ -6,3 +6,4 @@ fh6-frontend-context.md
 *.tfstate
 *.tfstate.backup
 lambda.zip
+__pycache__/
