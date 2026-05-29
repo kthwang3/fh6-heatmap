@@ -3,13 +3,34 @@
   <head>
     <meta charset="UTF-8">
     <title>FH6 Live Map</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,600;1,300&family=Outfit:wght@300;400;500;600&family=Noto+Serif+JP:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="livemap.css">
   </head>
   <body>
-    <div id = "map-container">
-      <img id="map-image" src="../frontend/japan-map.jpg">
-      <div id="player-dot"></div>
+
+    <div id="map-container">
+      <div id="map-inner">
+        <img id="map-image" src="../frontend/japan-map.jpg">
+        <div id="player-dot"></div>
+      </div>
     </div>
+
+    <div id="overlay">
+      <div id="overlay-title">
+        <span id="title-text">FH6 Live Map</span>
+      </div>
+      <div id="status-row">
+        <div id="status-dot"></div>
+        <span id="status-text">Connecting…</span>
+      </div>
+      <div id="zoom-controls">
+        <button id="zoom-in">＋</button>
+        <button id="zoom-out">－</button>
+      </div>
+    </div>
+
     <script src="livemap.js"></script>
   </body>
 </html>

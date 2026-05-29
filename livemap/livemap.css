@@ -1,34 +1,119 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: black;
+  background: #2a3f4f;
+  font-family: 'Outfit', sans-serif;
 }
 
+/* ── Map ── */
 #map-container {
-  position: relative;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+}
+
+#map-inner {
+  position: absolute;
+  transform-origin: 0 0;
 }
 
 #map-image {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+  display: block;
+  width: 2048px;
+  height: 2048px;
+}
+
+/* ── Player dot ── */
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(197,68,44,0.7), 0 0 6px rgba(197,68,44,0.5); }
+  50%       { box-shadow: 0 0 0 8px rgba(197,68,44,0), 0 0 6px rgba(197,68,44,0.5); }
 }
 
 #player-dot {
   position: absolute;
-  width: 12px;
-  height: 12px;
-  background: red;
+  width: 14px;
+  height: 14px;
+  background: #C5442C;
+  border: 2.5px solid #FAF8F3;
   border-radius: 50%;
-  /* ensures that center of dot is accurate to coordinates */
   transform: translate(-50%, -50%);
+  animation: pulse 2s ease-in-out infinite;
+  display: none;
+}
+
+/* ── Glass overlay ── */
+#overlay {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  background: rgba(250,248,243,0.9);
+  backdrop-filter: blur(14px);
+  border: 1px solid #E2D9CE;
+  border-radius: 10px;
+  padding: 16px 20px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 180px;
+}
+
+#overlay-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+#title-text {
+  font-family: 'Spectral', serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1C1410;
+}
+
+#status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #aaa;
+  flex-shrink: 0;
+}
+
+#status-dot.connected { background: #4caf82; }
+#status-dot.error     { background: #C5442C; }
+
+#status-text {
+  font-size: 12px;
+  color: #6B5240;
+}
+
+#zoom-controls {
+  display: flex;
+  gap: 8px;
+}
+
+#zoom-controls button {
+  flex: 1;
+  padding: 6px 0;
+  background: #FAF8F3;
+  border: 1px solid #E2D9CE;
+  border-radius: 6px;
+  color: #1C1410;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+#zoom-controls button:hover {
+  background: #F2ECE5;
 }

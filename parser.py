@@ -82,7 +82,7 @@ def udp_loop(event_loop, port=5301):
   lastState = 0
   my_uuid = uuid.uuid4()
   while True:
-    data, _ = sock.recvfrom(1024)
+    data, sender_address = sock.recvfrom(1024)
     if len(data) != 324:
       continue
     pkt = parse(data)
@@ -99,7 +99,7 @@ def udp_loop(event_loop, port=5301):
 
     asyncio.run_coroutine_threadsafe(broadcast(pkt.PositionX, pkt.PositionZ, pkt.Speed), event_loop)
     last_x, last_z = last_pos
-    if time.time() - last_time >= 5 or (((last_x - pkt.PositionX)**2 + (last_z - pkt.PositionZ)**2)**0.5) >= 50:
+    if time.time() - last_time >= 10 or (((last_x - pkt.PositionX)**2 + (last_z - pkt.PositionZ)**2)**0.5) >= 50:
       last_time = time.time()
       last_pos = (pkt.PositionX, pkt.PositionZ)
       timestamp = str(int(time.time() * 1000))

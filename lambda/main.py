@@ -30,3 +30,9 @@ def handler(event, context):
       "statusCode": 400,
       "body": json.dumps({"message": "Invalid Request"})
     }
+  except Exception as error:
+    print(error)
+    return {
+        "statusCode": 500,
+        "body": json.dumps({"message": str(error)})
+    }
