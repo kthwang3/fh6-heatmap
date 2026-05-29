@@ -26,13 +26,13 @@ def handler(event, context):
   for item in items:
     x = float(item['x_pos'])
     z = float(item['z_pos'])
-    col = int((x - X_MIN) / (X_MAX - X_MIN) * GRID_W)
-    row = int((z- Z_MIN) / (Z_MAX - Z_MIN) * GRID_H)
+    col = int((x / FACTOR_X + OFFSET_X) / IMAGE_SIZE * GRID_W)
+    row = int((z / FACTOR_Y + OFFSET_Y) / IMAGE_SIZE * GRID_H)
     if 0 <= col < GRID_W and 0 <= row < GRID_H:
       grid[row][col] += 1
   
   return {
     'statusCode': 200,
     'headers':{'Access-Control-Allow-Origin': '*'},
-    'body': json.dumps({'grid': grid, 'x_min': X_MIN, 'x_max': X_MAX, 'z_min': Z_MIN, 'z_max': Z_MAX})
+    'body': json.dumps({'grid': grid})
   }
