@@ -36,7 +36,10 @@
 const { useState, useRef, useEffect, useLayoutEffect, useCallback } = React;
 
 /* ── Constants ───────────────────────────────────────────── */
-const HEATMAP_URL = 'https://s60170byjh.execute-api.us-east-1.amazonaws.com/prod/heatmap';
+const CLOUDFRONT_BASE_URL = 'https://d229cekzpyx88w.cloudfront.net';
+const GRID_URL_ALL_TIME = CLOUDFRONT_BASE_URL + '/all-time-grids.json';
+const GRID_URL_WEEK     = CLOUDFRONT_BASE_URL + '/week-grids.json';
+const GRID_URL_MONTH    = CLOUDFRONT_BASE_URL + '/month-grids.json';
 const MAP_SIZE  = 6144;
 const GRID_SIZE = 200;
 const CELL_PX   = MAP_SIZE / GRID_SIZE;
@@ -53,7 +56,7 @@ const T = {
   subtle: '#F2ECE5',
   glass:  'rgba(250,248,243,0.9)',
 };
-const GRAD = 'linear-gradient(to right,rgba(109,40,217,.6),rgba(219,39,119,.78),rgba(249,115,22,.92),rgba(255,220,160,1))';
+const GRAD = 'linear-gradient(to right,rgba(109,40,217,.6),rgba(37,99,235,.75),rgba(34,197,94,.85),rgba(234,179,8,.92),rgba(249,115,22,.96),rgba(239,68,68,1))';
 const TABS = [['All Time','全期間','all'],['Week','週間','week'],['Month','月間','month']];
 const CLASS_LABELS = ['D', 'C', 'B', 'A', 'S1', 'S2', 'X'];
 
@@ -67,9 +70,11 @@ function clampAxis(nval, viewDim, scaledDim) {
 function intensityColor(t) {
   const stops = [
     { p: 0.00, r: 109, g:  40, b: 217 },
-    { p: 0.33, r: 219, g:  39, b: 119 },
-    { p: 0.66, r: 249, g: 115, b:  22 },
-    { p: 1.00, r: 255, g: 220, b: 160 },
+    { p: 0.20, r:  37, g:  99, b: 235 },
+    { p: 0.40, r:  34, g: 197, b:  94 },
+    { p: 0.60, r: 234, g: 179, b:   8 },
+    { p: 0.80, r: 249, g: 115, b:  22 },
+    { p: 1.00, r: 239, g:  68, b:  68 },
   ];
   let lo = stops[0], hi = stops[stops.length - 1];
   for (let i = 0; i < stops.length - 1; i++) {
@@ -372,6 +377,12 @@ function CarPopup({ cars, x, y, onClose }) {
           } else {
             classLabel = '?';
           }
+          let occurrenceLabel;
+          if (car.count === 1) {
+            occurrenceLabel = 'occurrence';
+          } else {
+            occurrenceLabel = 'occurrences';
+          }
           return (
             <div key={car.ordinal} style={{ display:'flex', alignItems:'center',
               gap:8, padding:'6px 8px', borderRadius:6,
@@ -387,7 +398,7 @@ function CarPopup({ cars, x, y, onClose }) {
                   {car.name}
                 </div>
                 <div style={{ fontFamily:'Outfit,sans-serif', fontSize:9, color:T.wood, marginTop:1 }}>
-                  PI {car.performanceIndex} · {car.count}×
+                  PI {car.performanceIndex} · {car.count} {occurrenceLabel}
                 </div>
               </div>
             </div>
@@ -406,10 +417,11 @@ function App() {
   const zoomRef   = useRef(1);
   const txRef     = useRef(0);
   const tyRef     = useRef(0);
-  const dragRef        = useRef({ active:false, hasMoved:false, startX:0, startY:0, startTx:0, startTy:0 });
+  const dragRef        = useRef({ active:false, startX:0, startY:0, startTx:0, startTy:0 });
   const carOrdinalsRef = useRef({});
   const carGridRef     = useRef(null);
   const gridRef        = useRef(null);
+  const lastHoverCell  = useRef({ row:-1, col:-1 });
 
   const [activeFilter, setActiveFilter] = useState('all');
   const [sidebarOpen, setSidebarOpen]   = useState(false);
@@ -527,38 +539,41 @@ function App() {
   const onPointerDown = useCallback((e) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     e.currentTarget.style.cursor = 'grabbing';
-    dragRef.current = { active:true, hasMoved:false, startX:e.clientX, startY:e.clientY,
+    dragRef.current = { active:true, startX:e.clientX, startY:e.clientY,
       startTx:txRef.current, startTy:tyRef.current };
   }, []);
 
   const onPointerMove = useCallback((e) => {
-    if (!dragRef.current.active) return;
-    const deltaX = e.clientX - dragRef.current.startX;
-    const deltaY = e.clientY - dragRef.current.startY;
-    if (deltaX * deltaX + deltaY * deltaY > 25) {
-      dragRef.current.hasMoved = true;
+    if (dragRef.current.active) {
+      const deltaX = e.clientX - dragRef.current.startX;
+      const deltaY = e.clientY - dragRef.current.startY;
+      const z = zoomRef.current;
+      const rawTx = dragRef.current.startTx + deltaX;
+      const rawTy = dragRef.current.startTy + deltaY;
+      const shell = shellRef.current, inner = innerRef.current;
+      if (!shell || !inner) return;
+      const W = shell.offsetWidth, H = shell.offsetHeight, D = inner.offsetWidth;
+      const Dz = D * z;
+      const clx = clampAxis(rawTx, W, Dz);
+      const cly = clampAxis(rawTy, H, Dz);
+      txRef.current = clx; tyRef.current = cly;
+      inner.style.transform = `translate(${clx}px,${cly}px) scale(${z})`;
+      return;
     }
-    const z = zoomRef.current;
-    const rawTx = dragRef.current.startTx + deltaX;
-    const rawTy = dragRef.current.startTy + deltaY;
-    const shell = shellRef.current, inner = innerRef.current;
-    if (!shell || !inner) return;
-    const W = shell.offsetWidth, H = shell.offsetHeight, D = inner.offsetWidth;
-    const Dz = D * z;
-    const clx = clampAxis(rawTx, W, Dz);
-    const cly = clampAxis(rawTy, H, Dz);
-    txRef.current = clx; tyRef.current = cly;
-    inner.style.transform = `translate(${clx}px,${cly}px) scale(${z})`;
+    const inner = innerRef.current;
+    if (!inner) return;
+    const col = Math.floor(((e.clientX - txRef.current) / zoomRef.current) * GRID_SIZE / inner.offsetWidth);
+    const row = Math.floor(((e.clientY - tyRef.current) / zoomRef.current) * GRID_SIZE / inner.offsetWidth);
+    if (col !== lastHoverCell.current.col || row !== lastHoverCell.current.row) {
+      lastHoverCell.current = { col, row };
+      handleMapClick(e.clientX, e.clientY);
+    }
   }, []);
 
   const onPointerUp = useCallback((e) => {
     e.currentTarget.releasePointerCapture(e.pointerId);
     e.currentTarget.style.cursor = 'grab';
-    const wasDragging = dragRef.current.hasMoved;
     dragRef.current.active = false;
-    if (!wasDragging) {
-      handleMapClick(e.clientX, e.clientY);
-    }
   }, []);
 
   /* Zoom button helpers */
@@ -595,9 +610,14 @@ function App() {
     setStatus('loading');
     setErrorMsg('');
     try {
-      const url = activeFilter === 'all'
-        ? HEATMAP_URL
-        : `${HEATMAP_URL}?range=${activeFilter}`;
+      let url;
+      if (activeFilter === 'all') {
+        url = GRID_URL_ALL_TIME;
+      } else if (activeFilter === 'week') {
+        url = GRID_URL_WEEK;
+      } else {
+        url = GRID_URL_MONTH;
+      }
       const res = await fetch(url, { cache:'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
