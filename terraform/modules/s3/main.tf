@@ -27,3 +27,11 @@ resource "aws_s3_bucket_public_access_block" "public_access" {
   ignore_public_acls      = false
   restrict_public_buckets = false
 }
+resource "aws_s3_bucket_cors_configuration" "cors" {
+  bucket = aws_s3_bucket.bucket.id
+  cors_rule {
+    allowed_methods = ["GET"]
+    allowed_origins = ["*"]
+    allowed_headers = ["*"]
+  }
+}

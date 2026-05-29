@@ -47,8 +47,22 @@ def filter_items(items, cutoff_ms):
       filtered_items.append(item)
   return filtered_items
 
+def compute_leaderboard(items):
+  car_counts = {}
+  for item in items:
+    if 'car_ordinal' not in item:
+      continue
+    car_ordinal = int(item['car_ordinal'])
+    car_counts[car_ordinal] = car_counts.get(car_ordinal, 0) + 1
+    
+  sorted_car_counts = sorted(car_counts, key=car_counts.get, reverse=True)
+  sorted_car_ordinals = sorted_car_counts[:10]
+  leaderboard = []
+  for ordinal in sorted_car_ordinals:
+    leaderboard.append({'ordinal': ordinal, 'count': car_counts[ordinal]})
+  return leaderboard
+
 def handler(event, context):
-  
   items = []
   response = table.scan()
   items += response['Items']
@@ -68,7 +82,10 @@ def handler(event, context):
   week_grid, week_car_grid = compute_grid(filtered_week)
   month_grid, month_car_grid = compute_grid(filtered_month)
 
-
+  #now find the top ten cars on the leaderboard
+  all_time_car_leaderboard = compute_leaderboard(items)
+  week_car_leaderboard = compute_leaderboard(filtered_week)
+  month_car_leaderboard = compute_leaderboard(filtered_month)
 
   s3_client.put_object(
     Bucket='fh6-heatmap-s3-kthwang3',
@@ -86,5 +103,23 @@ def handler(event, context):
     Bucket='fh6-heatmap-s3-kthwang3',
     Key='month-grids.json',
     Body=json.dumps({'grid': month_grid, 'car_grid': month_car_grid}),
+    ContentType='application/json'
+  )
+  s3_client.put_object(
+    Bucket='fh6-heatmap-s3-kthwang3',
+    Key='car-leaderboard-all-time.json',
+    Body=json.dumps({'all-time-leaderboard': all_time_car_leaderboard}),
+    ContentType='application/json'
+  )
+  s3_client.put_object(
+    Bucket='fh6-heatmap-s3-kthwang3',
+    Key='car-leaderboard-week.json',
+    Body=json.dumps({'week-leaderboard': week_car_leaderboard}),
+    ContentType='application/json'
+  )
+  s3_client.put_object(
+    Bucket='fh6-heatmap-s3-kthwang3',
+    Key='car-leaderboard-month.json',
+    Body=json.dumps({'month-leaderboard': month_car_leaderboard}),
     ContentType='application/json'
   )

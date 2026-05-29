@@ -37,9 +37,12 @@ const { useState, useRef, useEffect, useLayoutEffect, useCallback } = React;
 
 /* ── Constants ───────────────────────────────────────────── */
 const CLOUDFRONT_BASE_URL = 'https://d229cekzpyx88w.cloudfront.net';
-const GRID_URL_ALL_TIME = CLOUDFRONT_BASE_URL + '/all-time-grids.json';
-const GRID_URL_WEEK     = CLOUDFRONT_BASE_URL + '/week-grids.json';
-const GRID_URL_MONTH    = CLOUDFRONT_BASE_URL + '/month-grids.json';
+const GRID_URL_ALL_TIME        = CLOUDFRONT_BASE_URL + '/all-time-grids.json';
+const GRID_URL_WEEK            = CLOUDFRONT_BASE_URL + '/week-grids.json';
+const GRID_URL_MONTH           = CLOUDFRONT_BASE_URL + '/month-grids.json';
+const LEADERBOARD_URL_ALL_TIME = CLOUDFRONT_BASE_URL + '/car-leaderboard-all-time.json';
+const LEADERBOARD_URL_WEEK     = CLOUDFRONT_BASE_URL + '/car-leaderboard-week.json';
+const LEADERBOARD_URL_MONTH    = CLOUDFRONT_BASE_URL + '/car-leaderboard-month.json';
 const MAP_SIZE  = 6144;
 const GRID_SIZE = 200;
 const CELL_PX   = MAP_SIZE / GRID_SIZE;
@@ -257,7 +260,42 @@ function RefreshBtn({ onClick, loading }) {
   );
 }
 
-function Sidebar({ open, onClose, active, onChange, count, onRefresh, loading }) {
+function LeaderboardSection({ leaderboard, carOrdinals }) {
+  const LBL = { fontFamily:'Outfit,sans-serif', fontSize:9, fontWeight:600,
+    letterSpacing:'.18em', textTransform:'uppercase', color:T.wood, marginBottom:10 };
+  if (leaderboard.length === 0) {
+    return null;
+  }
+  return (
+    <div style={{ padding:'14px 20px' }}>
+      <div style={LBL}>Top Cars</div>
+      <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+        {leaderboard.map(function(entry, index) {
+          const carName = carOrdinals[String(entry.ordinal)];
+          let displayName;
+          if (carName) {
+            displayName = carName;
+          } else {
+            displayName = 'Car #' + entry.ordinal;
+          }
+          return (
+            <div key={entry.ordinal} style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <span style={{ fontFamily:'Outfit,sans-serif', fontSize:9, color:T.wood,
+                width:14, textAlign:'right', flexShrink:0 }}>{index + 1}</span>
+              <span style={{ fontFamily:'Outfit,sans-serif', fontSize:11, fontWeight:500,
+                color:T.ink, flex:1, overflow:'hidden', textOverflow:'ellipsis',
+                whiteSpace:'nowrap' }}>{displayName}</span>
+              <span style={{ fontFamily:'Outfit,sans-serif', fontSize:9,
+                color:T.wood, flexShrink:0 }}>{formatNum(entry.count)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Sidebar({ open, onClose, active, onChange, count, onRefresh, loading, leaderboard, carOrdinals }) {
   const LBL = { fontFamily:'Outfit,sans-serif', fontSize:9, fontWeight:600,
     letterSpacing:'.18em', textTransform:'uppercase', color:T.wood, marginBottom:10 };
   return (
@@ -287,6 +325,9 @@ function Sidebar({ open, onClose, active, onChange, count, onRefresh, loading })
                 backdropFilter:'blur(8px)', transition:'filter .12s' }}>←</button>
           </div>
           <div style={{ height:1, background:'rgba(197,68,44,0.18)', margin:'0 20px' }} />
+          {/* Top Cars leaderboard */}
+          <LeaderboardSection leaderboard={leaderboard} carOrdinals={carOrdinals} />
+          {leaderboard.length > 0 && <div style={{ height:1, background:'rgba(197,68,44,0.18)', margin:'0 20px' }} />}
           {/* Time Range */}
           <div style={{ padding:'14px 20px' }}>
             <div style={LBL}>Time Range</div>
@@ -313,9 +354,15 @@ function Sidebar({ open, onClose, active, onChange, count, onRefresh, loading })
             </div>
           </div>
           <div style={{ flex:1 }} />
-          <div style={{ padding:'12px 20px 22px',
+          <div style={{ padding:'12px 20px 16px',
             borderTop:'1px solid rgba(197,68,44,0.18)' }}>
             <RefreshBtn onClick={onRefresh} loading={loading} />
+            <a href="https://github.com/kthwang3" target="_blank" rel="noreferrer"
+              style={{ display:'block', marginTop:10, fontFamily:'Outfit,sans-serif',
+                fontSize:9, color:T.wood, letterSpacing:'.12em', textTransform:'uppercase',
+                textDecoration:'none', opacity:0.6 }}>
+              built by kthwang3
+            </a>
           </div>
         </div>
       </div>
@@ -429,6 +476,7 @@ function App() {
   const [status, setStatus]             = useState('loading');
   const [errorMsg, setErrorMsg]         = useState('');
   const [popupState, setPopupState]     = useState({ visible:false, x:0, y:0, cars:[] });
+  const [leaderboard, setLeaderboard]   = useState([]);
 
   /* Center map before first paint */
   useLayoutEffect(() => {
@@ -610,15 +658,23 @@ function App() {
     setStatus('loading');
     setErrorMsg('');
     try {
-      let url;
+      let gridUrl;
       if (activeFilter === 'all') {
-        url = GRID_URL_ALL_TIME;
+        gridUrl = GRID_URL_ALL_TIME;
       } else if (activeFilter === 'week') {
-        url = GRID_URL_WEEK;
+        gridUrl = GRID_URL_WEEK;
       } else {
-        url = GRID_URL_MONTH;
+        gridUrl = GRID_URL_MONTH;
       }
-      const res = await fetch(url, { cache:'no-store' });
+      let leaderboardUrl;
+      if (activeFilter === 'all') {
+        leaderboardUrl = LEADERBOARD_URL_ALL_TIME;
+      } else if (activeFilter === 'week') {
+        leaderboardUrl = LEADERBOARD_URL_WEEK;
+      } else {
+        leaderboardUrl = LEADERBOARD_URL_MONTH;
+      }
+      const res = await fetch(gridUrl, { cache:'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (!data || !Array.isArray(data.grid)) throw new Error('Malformed response');
@@ -626,6 +682,19 @@ function App() {
       carGridRef.current = data.car_grid || null;
       const total = drawHeatmap(canvasRef.current, data.grid);
       setTotalCount(total);
+      const leaderboardRes = await fetch(leaderboardUrl, { cache:'no-store' });
+      if (leaderboardRes.ok) {
+        const leaderboardData = await leaderboardRes.json();
+        let leaderboardKey;
+        if (activeFilter === 'all') {
+          leaderboardKey = 'all-time-leaderboard';
+        } else if (activeFilter === 'week') {
+          leaderboardKey = 'week-leaderboard';
+        } else {
+          leaderboardKey = 'month-leaderboard';
+        }
+        setLeaderboard(leaderboardData[leaderboardKey] || []);
+      }
       setStatus('ready');
     } catch (err) {
       console.error(err);
@@ -677,7 +746,8 @@ function App() {
       {/* Collapsible sidebar */}
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)}
         active={activeFilter} onChange={setActiveFilter}
-        count={totalCount} onRefresh={fetchHeatmap} loading={loading} />
+        count={totalCount} onRefresh={fetchHeatmap} loading={loading}
+        leaderboard={leaderboard} carOrdinals={carOrdinalsRef.current} />
 
       {/* Top bar */}
       <div style={{ position:'absolute', top:0, left:0, right:0, padding:'18px 24px',
