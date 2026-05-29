@@ -33,6 +33,7 @@ resource "aws_lambda_function" "lambda_aggregate"{
   handler = "aggregation.handler"
   filename = "../lambda.zip"
   role = aws_iam_role.lambda_role.arn
+  timeout = 30
 }
 resource "aws_lambda_permission" "allow_api_gateway" {
   statement_id = "AllowAPIGatewayInvoke"
