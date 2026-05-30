@@ -19,4 +19,4 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
       
       - name: Deploy to S3
-        run: aws s3 sync frontend/ s3://fh6-heatmap-s3-kthwang3 --delete
+        run: aws s3 sync frontend/ s3://fh6-heatmap-s3-kthwang3 --delete --exclude "*-grids.json" --exclude "car-leaderboard-*"
