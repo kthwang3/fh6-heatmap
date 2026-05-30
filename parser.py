@@ -29,6 +29,9 @@ def start_livemap_server(base_path):
   class LivemapHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, request, client_address, server):
       super().__init__(request, client_address, server, directory=livemap_path)
+    
+    def log_message(self, format, *args):
+      pass
   
   def run():
     server = http.server.HTTPServer(('', 5500), LivemapHandler)
