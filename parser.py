@@ -31,7 +31,7 @@ def start_livemap_server(base_path):
       super().__init__(request, client_address, server, directory=livemap_path)
   
   def run():
-    server = http.server.HTTPServer(('', 8080), LivemapHandler)
+    server = http.server.HTTPServer(('', 5500), LivemapHandler)
     server.serve_forever()
   thread = threading.Thread(target=run)
   #Stop http after user closes .exe
@@ -144,7 +144,7 @@ async def main():
   base_path = get_base_path()
   start_livemap_server(base_path)
   time.sleep(0.5)
-  webbrowser.open('http://localhost:8080/livemap.html')
+  webbrowser.open('http://localhost:5500/livemap.html')
   event_loop = asyncio.get_running_loop()
   websocket_server = await websockets.serve(ws_handler, 'localhost', 8765)
   # keep main alive and run udp_loop in background of event_loop
