@@ -1,0 +1,24 @@
+name: Release and Upload
+
+on:
+  push:
+    tags:
+      - 'v*'
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: pip-install
+        run: pip install -r requirements.txt && pip install pyinstaller
+        
+      - name: Run pyinstaller
+        run: pyinstaller --onefile --noconsole --add-data "livemap;livemap" --name FH6-Livemap parser.py
+
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/FH6-Livemap.exe
+

@@ -6,7 +6,32 @@ import requests
 import asyncio
 import json
 import websockets
+import sys
+import os
+import threading
+import http.server
+import webbrowser
 from collections import namedtuple
+
+#help find livemap/ regardless of python script or bundled .exe
+def get_base_path():
+  #Check sys.frozen
+  if getattr(sys,'frozen', False):
+    return sys._MEIPASS
+  else:
+    return os.path.dirname(os.path.abspath(__file__))
+
+#starts http server in a background thread
+def start_livemap_server(base_path):
+  livemap_path = base_path + '/livemap'
+  def run():
+    os.chdir(livemap_path)
+    server = http.server.HTTPServer(('', 8080), http.server.SimpleHTTPRequestHandler)
+    server.serve_forever()
+  thread = threading.Thread(target=run)
+  #Stop http after user closes .exe
+  thread.daemon = True
+  thread.start()
 
 #Livemap feature: broadcast position on every packet
 clients = set()
@@ -107,11 +132,14 @@ def udp_loop(event_loop, port=5301):
 
       #POST to API Gateway URL
       requests.post(url, json={'timestamp': timestamp, 'session_id': str(my_uuid), 'x_pos': pkt.PositionX, 'z_pos': pkt.PositionZ, 'car_ordinal': pkt.CarOrdinal, 'car_class': pkt.CarClass, 'car_performance_index': pkt.CarPerformanceIndex})
-      print(f'X={pkt.PositionX:10.1f} Z={pkt.PositionZ:10.1f} speed={pkt.Speed * 3.6:.1f} km/h')
 
 # 1. Start websocket server -> browsers
 # 2. Launch udp_loop in a background threat -> FH6 packets
+# 3. call start and open http server
 async def main():
+  base_path = get_base_path()
+  start_livemap_server(base_path)
+  webbrowser.open('http://localhost:8080/livemap.html')
   event_loop = asyncio.get_running_loop()
   websocket_server = await websockets.serve(ws_handler, 'localhost', 8765)
   # keep main alive and run udp_loop in background of event_loop
@@ -119,7 +147,7 @@ async def main():
   websocket_server.close()
 
 if __name__ == '__main__':
-  # create an event loop that runs infinitely
+  # create an event loop that runs until program is closed
   asyncio.run(main())
 
 
