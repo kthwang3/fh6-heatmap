@@ -141,6 +141,7 @@ def udp_loop(event_loop, port=5301):
 async def main():
   base_path = get_base_path()
   start_livemap_server(base_path)
+  time.sleep(0.5)
   webbrowser.open('http://localhost:8080/livemap.html')
   event_loop = asyncio.get_running_loop()
   websocket_server = await websockets.serve(ws_handler, 'localhost', 8765)
