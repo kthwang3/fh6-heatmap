@@ -23,7 +23,7 @@ def get_base_path():
 
 #starts http server in a background thread
 def start_livemap_server(base_path):
-  livemap_path = base_path + '/livemap'
+  livemap_path = os.path.join(base_path, 'livemap')
   def run():
     os.chdir(livemap_path)
     server = http.server.HTTPServer(('', 8080), http.server.SimpleHTTPRequestHandler)
