@@ -21,14 +21,17 @@ def get_base_path():
   else:
     return os.path.dirname(os.path.abspath(__file__))
 
-#starts http server in a background thread
+#starts http server in a background thread by passsing livemap directly to the handler
 def start_livemap_server(base_path):
   livemap_path = os.path.join(base_path, 'livemap')
-  print('livemap_path:', livemap_path)
-  print('exists:', os.path.exists(livemap_path))
+  
+  #Reuse SimpleHTTPRequestHandler but serve from livemap_path directory
+  class LivemapHandler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, request, client_address, server):
+      super().__init__(request, client_address, server, directory=livemap_path)
+  
   def run():
-    os.chdir(livemap_path)
-    server = http.server.HTTPServer(('', 8080), http.server.SimpleHTTPRequestHandler)
+    server = http.server.HTTPServer(('', 8080), LivemapHandler)
     server.serve_forever()
   thread = threading.Thread(target=run)
   #Stop http after user closes .exe
