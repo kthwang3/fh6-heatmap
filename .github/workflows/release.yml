@@ -18,6 +18,9 @@ jobs:
         
       - name: Run pyinstaller
         run: pyinstaller --onefile --noconsole --add-data "livemap/*;livemap" --name FH6-Livemap parser.py
+      
+      - name: Debug
+        run: dir dist && dir "dist\FH6-Livemap\_internal"
 
       - name: Create release
         uses: softprops/action-gh-release@v3
