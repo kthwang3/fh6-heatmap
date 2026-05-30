@@ -106,7 +106,6 @@ def parse(data: bytes) -> Packet:
 def udp_loop(event_loop, port=5301):
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   sock.bind(('', port))
-  print(f'Listening on UDP port {port}...')
   last_time = 0
   last_pos = (0.0, 0.0)
   lastState = 0
