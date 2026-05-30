@@ -116,7 +116,7 @@ function drawHeatmap(canvas, grid) {
       if (visitCount === 0) continue;
       const density = visitCount / max;
       const { r: cr, g: cg, b: cb } = intensityColor(density);
-      const alpha = Math.min(0.1 + density * 0.52, 0.74);
+      const alpha = Math.min(0.2 + density * 0.72, 0.94);
       const x  = c * CELL_PX;
       const y  = r * CELL_PX;
       const pcx = x + CELL_PX / 2;
@@ -124,7 +124,7 @@ function drawHeatmap(canvas, grid) {
       const radius = CELL_PX * (1.35 + density * 1.08);
       const grad = ctx.createRadialGradient(pcx, pcy, 0, pcx, pcy, radius);
       grad.addColorStop(0,    `rgba(${cr},${cg},${cb},${alpha.toFixed(3)})`);
-      grad.addColorStop(0.48, `rgba(${cr},${cg},${cb},${(alpha * 0.55).toFixed(3)})`);
+      grad.addColorStop(0.48, `rgba(${cr},${cg},${cb},${(alpha * 0.65).toFixed(3)})`);
       grad.addColorStop(1,    `rgba(${cr},${cg},${cb},0)`);
       ctx.fillStyle = grad;
       ctx.fillRect(pcx - radius, pcy - radius, radius * 2, radius * 2);

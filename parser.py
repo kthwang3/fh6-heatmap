@@ -57,8 +57,12 @@ async def broadcast(x, z, speed):
   message = json.dumps({"x": x, "z": z, "speed": round(speed * 3.6, 1)})
   #make a copy to prevent runtime error if ws_handler closes client
   for client in clients.copy():
+    #try/except so closed client doesn't throw
     #send json string over the WebSocket connection to that browser tab
-    await client.send(message)
+    try:
+      await client.send(message)
+    except Exception:
+      pass
 
 
 FMT = '<iIfff' + 'f' * 24 + 'i' * 8 + 'f' * 16 + 'i' * 5  + 'I' + 'f' * 19 + 'H' + 'B' * 6 + 'bbbx'

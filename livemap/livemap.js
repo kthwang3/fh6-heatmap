@@ -113,24 +113,29 @@ function moveDot(gameX, gameZ) {
 }
 
 // ── WebSocket ──
-const socket = new WebSocket('ws://localhost:8765');
+function connect() {
+  const socket = new WebSocket('ws://localhost:8765');
 
-socket.onopen = function() {
-  statusDot.className = 'connected';
-  statusText.textContent = 'Connected';
-};
+  socket.onopen = function() {
+    statusDot.className = 'connected';
+    statusText.textContent = 'Connected';
+  };
 
-socket.onclose = function() {
-  statusDot.className = 'error';
-  statusText.textContent = 'Disconnected';
-};
+  socket.onclose = function() {
+    statusDot.className = 'error';
+    statusText.textContent = 'Disconnected';
+    setTimeout(connect, 2000);
+  };
 
-socket.onerror = function() {
-  statusDot.className = 'error';
-  statusText.textContent = 'Error';
-};
+  socket.onerror = function() {
+    statusDot.className = 'error';
+    statusText.textContent = 'Error';
+  };
 
-socket.onmessage = function(event) {
-  const data = JSON.parse(event.data);
-  moveDot(data.x, data.z);
-};
+  socket.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    moveDot(data.x, data.z);
+  };
+}
+
+connect();
