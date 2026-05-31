@@ -64,7 +64,7 @@ const T = {
 };
 const GRAD = 'linear-gradient(to right,rgba(109,40,217,.6),rgba(37,99,235,.75),rgba(34,197,94,.85),rgba(234,179,8,.92),rgba(249,115,22,.96),rgba(239,68,68,1))';
 const TABS = [['All Time','全期間','all'],['Week','週間','week'],['Month','月間','month']];
-const CLASS_LABELS = ['D', 'C', 'B', 'A', 'S1', 'S2', 'X'];
+const CLASS_LABELS = ['D', 'C', 'B', 'A', 'S1', 'S2', 'R', 'X'];
 
 /* ── Zoom/pan clamp helper ───────────────────────────────── */
 function clampAxis(nval, viewDim, scaledDim) {
@@ -468,11 +468,16 @@ function App() {
   const txRef     = useRef(0);
   const tyRef     = useRef(0);
   const dragRef        = useRef({ active:false, startX:0, startY:0, startTx:0, startTy:0 });
+  const pinchDistRef       = useRef(null);
+  const activePointersRef  = useRef(new Map());
+  const tapRef             = useRef(null);
   const carOrdinalsRef = useRef({});
   const carGridRef     = useRef(null);
   const gridRef        = useRef(null);
   const lastHoverCell  = useRef({ row:-1, col:-1 });
 
+  const [windowWidth, setWindowWidth]   = useState(window.innerWidth);
+  const isMobile = windowWidth < 768;
   const [activeFilter, setActiveFilter] = useState('all');
   const [sidebarOpen, setSidebarOpen]   = useState(false);
   const [totalCount, setTotalCount]     = useState(0);
@@ -550,9 +555,10 @@ function App() {
       return;
     }
     let popupX = clientX + 16;
-    if (popupX + 300 > window.innerWidth) {
-      popupX = clientX - 316;
+    if (popupX + 290 > window.innerWidth) {
+      popupX = clientX - 306;
     }
+    popupX = Math.max(8, popupX);
     let popupY = clientY;
     if (popupY + 260 > window.innerHeight) {
       popupY = window.innerHeight - 260;
@@ -586,15 +592,66 @@ function App() {
     return () => shell.removeEventListener('wheel', onWheel);
   }, []);
 
+  /* Window resize → update isMobile */
+  useEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   /* Pointer drag handlers */
   const onPointerDown = useCallback((e) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    e.currentTarget.style.cursor = 'grabbing';
-    dragRef.current = { active:true, startX:e.clientX, startY:e.clientY,
-      startTx:txRef.current, startTy:tyRef.current };
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    tapRef.current = { x: e.clientX, y: e.clientY, time: Date.now() };
+    if (activePointersRef.current.size === 1) {
+      e.currentTarget.style.cursor = 'grabbing';
+      dragRef.current = { active: true, startX: e.clientX, startY: e.clientY,
+        startTx: txRef.current, startTy: tyRef.current };
+    } else if (activePointersRef.current.size === 2) {
+      dragRef.current.active = false;
+      const pts = [...activePointersRef.current.values()];
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      pinchDistRef.current = Math.sqrt(dx * dx + dy * dy);
+    }
   }, []);
 
   const onPointerMove = useCallback((e) => {
+    if (activePointersRef.current.has(e.pointerId)) {
+      activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    const pointerCount = activePointersRef.current.size;
+
+    if (pointerCount === 2) {
+      const pts = [...activePointersRef.current.values()];
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (pinchDistRef.current !== null) {
+        const factor = dist / pinchDistRef.current;
+        const midX = (pts[0].x + pts[1].x) / 2;
+        const midY = (pts[0].y + pts[1].y) / 2;
+        const shell = shellRef.current;
+        const inner = innerRef.current;
+        if (!shell || !inner) return;
+        const z0 = zoomRef.current;
+        const newZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z0 * factor));
+        const rawTx = midX - (midX - txRef.current) * (newZ / z0);
+        const rawTy = midY - (midY - tyRef.current) * (newZ / z0);
+        const W = shell.offsetWidth, H = shell.offsetHeight, D = inner.offsetWidth;
+        const Dz = D * newZ;
+        const clx = clampAxis(rawTx, W, Dz);
+        const cly = clampAxis(rawTy, H, Dz);
+        zoomRef.current = newZ; txRef.current = clx; tyRef.current = cly;
+        inner.style.transform = `translate(${clx}px,${cly}px) scale(${newZ})`;
+      }
+      pinchDistRef.current = dist;
+      return;
+    }
+
+    pinchDistRef.current = null;
+
     if (dragRef.current.active) {
       const deltaX = e.clientX - dragRef.current.startX;
       const deltaY = e.clientY - dragRef.current.startY;
@@ -611,6 +668,8 @@ function App() {
       inner.style.transform = `translate(${clx}px,${cly}px) scale(${z})`;
       return;
     }
+
+    if (e.pointerType === 'touch') return;
     const inner = innerRef.current;
     if (!inner) return;
     const col = Math.floor(((e.clientX - txRef.current) / zoomRef.current) * GRID_SIZE / inner.offsetWidth);
@@ -619,13 +678,31 @@ function App() {
       lastHoverCell.current = { col, row };
       handleMapClick(e.clientX, e.clientY);
     }
-  }, []);
+  }, [handleMapClick]);
 
   const onPointerUp = useCallback((e) => {
+    const tap = tapRef.current;
+    const isTap = tap && e.pointerType === 'touch' &&
+      Math.abs(e.clientX - tap.x) < 12 && Math.abs(e.clientY - tap.y) < 12 &&
+      (Date.now() - tap.time) < 400;
+
     e.currentTarget.releasePointerCapture(e.pointerId);
-    e.currentTarget.style.cursor = 'grab';
-    dragRef.current.active = false;
-  }, []);
+    activePointersRef.current.delete(e.pointerId);
+    if (activePointersRef.current.size < 2) {
+      pinchDistRef.current = null;
+    }
+    if (activePointersRef.current.size === 1) {
+      const [remaining] = activePointersRef.current.values();
+      dragRef.current = { active: true, startX: remaining.x, startY: remaining.y,
+        startTx: txRef.current, startTy: tyRef.current };
+    }
+    if (activePointersRef.current.size === 0) {
+      e.currentTarget.style.cursor = 'grab';
+      dragRef.current.active = false;
+      tapRef.current = null;
+      if (isTap) handleMapClick(e.clientX, e.clientY);
+    }
+  }, [handleMapClick]);
 
   /* Zoom button helpers */
   const zoomAtCenter = useCallback((factor) => {
@@ -711,14 +788,14 @@ function App() {
   const loading = status === 'loading';
 
   return (
-    <div ref={shellRef} style={{ position:'relative', width:'100vw', height:'100vh',
+    <div ref={shellRef} style={{ position:'relative', width:'100vw', height:'100dvh',
       overflow:'hidden', background:'#2a3f4f' }}>
 
       {/* Draggable map layer */}
       <div ref={innerRef}
         style={{ position:'absolute', top:0, left:0,
           width:'max(100vw,100vh)', height:'max(100vw,100vh)',
-          transformOrigin:'0 0', willChange:'transform', cursor:'grab',
+          transformOrigin:'0 0', willChange:'transform', cursor:'grab', touchAction:'none',
           background:"url('./japan-map.jpg') center/cover no-repeat" }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -765,13 +842,23 @@ function App() {
         </button>
         <Wordmark />
         <div style={{ flex:1 }} />
-        <FilterPills active={activeFilter} onChange={setActiveFilter} />
-        <RefreshBtn onClick={fetchHeatmap} loading={loading} />
+        {!isMobile && <FilterPills active={activeFilter} onChange={setActiveFilter} />}
+        {!isMobile && <RefreshBtn onClick={fetchHeatmap} loading={loading} />}
       </div>
+
+      {/* Mobile filter row */}
+      {isMobile && (
+        <div style={{ position:'absolute', top:80, left:0, right:0,
+          display:'flex', justifyContent:'center', alignItems:'center', gap:8,
+          padding:'0 16px 10px', zIndex:10 }}>
+          <FilterPills active={activeFilter} onChange={setActiveFilter} />
+          <RefreshBtn onClick={fetchHeatmap} loading={loading} />
+        </div>
+      )}
 
       {/* Bottom-left HUD: stats + legend when sidebar closed */}
       {!sidebarOpen && (
-        <div style={{ position:'absolute', bottom:28, left:28,
+        <div style={{ position:'absolute', bottom: isMobile ? 36 : 28, left:28,
           display:'flex', flexDirection:'column', gap:10, zIndex:5 }}>
           <StatsCard count={totalCount} />
           <Legend />
@@ -779,13 +866,13 @@ function App() {
       )}
       {/* Legend only, shifted right of sidebar when open */}
       {sidebarOpen && (
-        <div style={{ position:'absolute', bottom:28, left:320, zIndex:5 }}>
+        <div style={{ position:'absolute', bottom: isMobile ? 36 : 28, left:320, zIndex:5 }}>
           <Legend />
         </div>
       )}
 
       {/* Zoom controls — always bottom-right */}
-      <div style={{ position:'absolute', bottom:28, right:28, zIndex:5 }}>
+      <div style={{ position:'absolute', bottom: isMobile ? 36 : 28, right:28, zIndex:5 }}>
         <ZoomCtrl onIn={zoomIn} onOut={zoomOut} onReset={resetZoom} />
       </div>
 
@@ -800,12 +887,14 @@ function App() {
       )}
 
       {/* Pan hint */}
-      <div style={{ position:'absolute', bottom:10, left:'50%',
+      <div style={{ position:'absolute', bottom: isMobile ? 14 : 10, left:'50%',
         transform:'translateX(-50%)', zIndex:4,
         fontFamily:'Outfit,sans-serif', fontSize:9, letterSpacing:'.1em',
         textTransform:'uppercase', color:'rgba(255,255,255,0.38)',
         pointerEvents:'none', whiteSpace:'nowrap' }}>
-        drag to pan · scroll to zoom
+        {isMobile
+          ? 'drag to pan · pinch to zoom · tap cell for cars'
+          : 'drag to pan · scroll to zoom · click cell for cars'}
       </div>
 
       {/* Loading overlay */}
