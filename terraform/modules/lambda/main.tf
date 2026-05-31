@@ -47,7 +47,7 @@ resource "aws_lambda_function" "lambda_preaggregate"{
   handler = "preaggregate.handler"
   filename = "../lambda.zip"
   role = aws_iam_role.lambda_role.arn
-  timeout = 180
+  timeout = 600
   source_code_hash = filebase64sha256("../lambda.zip")
 }
 resource "aws_lambda_permission" "allow_api_gateway" {
