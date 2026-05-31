@@ -116,7 +116,7 @@ function drawHeatmap(canvas, grid) {
       if (visitCount === 0) continue;
       const density = Math.log(visitCount + 1) / Math.log(max + 1);
       const { r: cr, g: cg, b: cb } = intensityColor(density);
-      const alpha = Math.min(0.2 + density * 0.72, 0.94);
+      const alpha = Math.min(0.15 + density * 0.55, 0.75);
       const x  = c * CELL_PX;
       const y  = r * CELL_PX;
       const pcx = x + CELL_PX / 2;
