@@ -30,6 +30,22 @@ Community heatmap + real-time live map for Forza Horizon 6. See where the commun
 
 ---
 
+## Screenshots
+
+### Website
+![Website](images/website.png)
+
+### City Heatmap
+![City Heatmap](images/city-heatmap.png)
+
+### Leaderboard
+![Leaderboard](images/heatmap-leaderboard.png)
+
+### Live Map
+![Live Map](images/live-map-screenshot.png)
+
+---
+
 ## Architecture
 
 ### Write Path — Telemetry Ingestion
