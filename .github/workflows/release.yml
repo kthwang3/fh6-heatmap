@@ -4,23 +4,45 @@ on:
   push:
     tags:
       - 'v*'
+
 jobs:
-  release:
+  build-windows:
     runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: pip install -r requirements.txt && pip install pyinstaller
+      - run: pyinstaller --noconsole --onefile --add-data "livemap;livemap" --name FH6-Livemap parser.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: dist/FH6-Livemap.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: pip install -r requirements.txt && pip install pyinstaller
+      - run: pyinstaller --onefile --add-data "livemap:livemap" --name FH6-Livemap parser.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary
+          path: dist/FH6-Livemap
+
+  release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: checkout
-        uses: actions/checkout@v6
-
-      - name: pip-install
-        run: pip install -r requirements.txt && pip install pyinstaller
-        
-      - name: Run pyinstaller
-        run: pyinstaller --noconsole --onefile --add-data "livemap;livemap" --name FH6-Livemap parser.py
-
-      - name: Create release
-        uses: softprops/action-gh-release@v3
+      - uses: actions/download-artifact@v4
         with:
-          files: dist/FH6-Livemap.exe
-
+          name: windows-binary
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-binary
+      - run: mv FH6-Livemap FH6-Livemap-linux
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            FH6-Livemap.exe
+            FH6-Livemap-linux

@@ -151,7 +151,10 @@ async def main():
   base_path = get_base_path()
   start_livemap_server(base_path)
   time.sleep(0.5)
-  webbrowser.open('http://localhost:5500/livemap.html')
+  #Return False if cannot find a browser, or opens automatically for windows/desktop linux
+  url = 'http://localhost:5500/livemap.html'
+  if not webbrowser.open(url):
+    print(f'Open {url} in your browser')
   event_loop = asyncio.get_running_loop()
   websocket_server = await websockets.serve(ws_handler, 'localhost', 8765)
   # keep main alive and run udp_loop in background of event_loop
