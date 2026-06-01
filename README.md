@@ -11,6 +11,8 @@ Community heatmap + real-time live map for Forza Horizon 6. See where the commun
 
 ## Download & Setup
 
+### Windows
+
 1. Download `FH6-Livemap.exe` from the [Releases](https://github.com/kthwang3/fh6-heatmap/releases) page
 2. Run it — a browser tab opens automatically with the live map
 3. In FH6: **Settings → HUD and Gameplay → Data Out**
@@ -20,6 +22,20 @@ Community heatmap + real-time live map for Forza Horizon 6. See where the commun
 4. Start driving — your dot moves on the live map and your position is added to the community heatmap
 
 > **Windows Defender warning:** Windows may flag the .exe as unrecognized. Click **More info → Run anyway**. This is a known false positive for PyInstaller-bundled apps.
+
+### Linux
+
+1. Download `FH6-Livemap-linux` from the [Releases](https://github.com/kthwang3/fh6-heatmap/releases) page
+2. Make it executable and run it:
+   ```bash
+   chmod +x FH6-Livemap-linux
+   ./FH6-Livemap-linux
+   ```
+3. In FH6: **Settings → HUD and Gameplay → Data Out**
+   - Data Out: **On**
+   - Data Out IP Address: `127.0.0.1`
+   - Data Out Port: `5301`
+4. Start driving — a browser tab opens automatically with the live map, or open the printed URL manually if it doesn't
 
 ---
 
@@ -157,7 +173,7 @@ graph TD
 
 **Terraform** — provisions every resource above as code. `terraform apply` from the `terraform/` directory recreates the full stack from scratch.
 
-**GitHub Actions** — two workflows: `deploy.yml` syncs the frontend to S3 on every push to `main`; `release.yml` builds `FH6-Livemap.exe` on a Windows runner and uploads it to GitHub Releases on every version tag.
+**GitHub Actions** — two workflows: `deploy.yml` syncs the frontend to S3 on every push to `main`; `release.yml` builds `FH6-Livemap.exe` on a Windows runner and `FH6-Livemap-linux` on an Ubuntu runner, then uploads both to GitHub Releases on every version tag.
 
 ---
 
