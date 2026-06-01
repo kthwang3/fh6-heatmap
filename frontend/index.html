@@ -548,7 +548,7 @@ function App() {
         performanceIndex: carData.car_performance_index,
         count: carData.count,
       });
-      if (carList.length >= 5) break;
+      if (carList.length >= 10) break;
     }
     if (carList.length === 0) {
       setPopupState({ visible:false, x:0, y:0, cars:[] });
