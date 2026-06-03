@@ -49,13 +49,13 @@ Community heatmap + real-time live map for Forza Horizon 6. See where the commun
 ## Screenshots
 
 ### Website
-![Website](images/website.png)
+![Website](images/fh6-heatmap-website-182000.png)
 
 ### City Heatmap
-![City Heatmap](images/city-heatmap.png)
+![City Heatmap](images/fh6-heatmap-city-182000.png)
 
 ### Leaderboard
-![Leaderboard](images/heatmap-leaderboard.png)
+![Leaderboard](images/fh6-heatmap-leaderboard-182000.png)
 
 ### Live Map
 ![Live Map](images/live-map-screenshot.png)
