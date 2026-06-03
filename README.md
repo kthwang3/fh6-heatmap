@@ -37,7 +37,7 @@ Community heatmap + real-time live map for Forza Horizon 6. See where the commun
    - Data Out Port: `5301`
 4. Start driving — a browser tab opens automatically with the live map, or open the printed URL manually if it doesn't
 
-### Tablet (second monitor on same WiFi)
+### If using Tablet as Second Monitor (on same WiFi)
 
 1. Run `FH6-Livemap.exe` (or `FH6-Livemap-linux`) on your PC as normal
 2. **Windows:** Open Windows Defender Firewall → Inbound Rules → find `fh6-livemap.exe` → make sure both Private and Public are checked
