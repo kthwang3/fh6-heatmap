@@ -156,7 +156,7 @@ async def main():
   print(f'Live map: {url}')
   threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
   event_loop = asyncio.get_running_loop()
-  websocket_server = await websockets.serve(ws_handler, 'localhost', 8765)
+  websocket_server = await websockets.serve(ws_handler, '0.0.0.0', 8765)
   # keep main alive and run udp_loop in background of event_loop
   await event_loop.run_in_executor(None, udp_loop, event_loop)
   websocket_server.close()

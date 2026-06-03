@@ -97,6 +97,48 @@ document.addEventListener('mouseup', function() {
   container.style.cursor = 'grab';
 });
 
+// ── Touch pan + pinch zoom ──
+let lastTouchX = 0;
+let lastTouchY = 0;
+let lastPinchDist = 0;
+
+container.addEventListener('touchstart', function(event) {
+  event.preventDefault();
+  if (event.touches.length === 1) {
+    lastTouchX = event.touches[0].clientX;
+    lastTouchY = event.touches[0].clientY;
+  } else if (event.touches.length === 2) {
+    const dx = event.touches[0].clientX - event.touches[1].clientX;
+    const dy = event.touches[0].clientY - event.touches[1].clientY;
+    lastPinchDist = Math.sqrt(dx * dx + dy * dy);
+  }
+}, { passive: false });
+
+container.addEventListener('touchmove', function(event) {
+  event.preventDefault();
+  if (event.touches.length === 1) {
+    const dx = event.touches[0].clientX - lastTouchX;
+    const dy = event.touches[0].clientY - lastTouchY;
+    translateX = translateX + dx;
+    translateY = translateY + dy;
+    lastTouchX = event.touches[0].clientX;
+    lastTouchY = event.touches[0].clientY;
+    applyTransform();
+  } else if (event.touches.length === 2) {
+    const dx = event.touches[0].clientX - event.touches[1].clientX;
+    const dy = event.touches[0].clientY - event.touches[1].clientY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const newZoom = clamp(zoomLevel * (dist / lastPinchDist), MIN_ZOOM, MAX_ZOOM);
+    const centerX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+    const centerY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+    translateX = centerX - (centerX - translateX) * (newZoom / zoomLevel);
+    translateY = centerY - (centerY - translateY) * (newZoom / zoomLevel);
+    zoomLevel = newZoom;
+    lastPinchDist = dist;
+    applyTransform();
+  }
+}, { passive: false });
+
 // ── Position ──
 function worldToPixel(gameX, gameZ) {
   const pixelX = gameX / FACTOR_X + OFFSET_X;
@@ -114,7 +156,7 @@ function moveDot(gameX, gameZ) {
 
 // ── WebSocket ──
 function connect() {
-  const socket = new WebSocket('ws://localhost:8765');
+  const socket = new WebSocket('ws://' + window.location.hostname + ':8765');
 
   socket.onopen = function() {
     statusDot.className = 'connected';
