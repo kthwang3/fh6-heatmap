@@ -40,11 +40,12 @@ Community heatmap + real-time live map for Forza Horizon 6. See where the commun
 ### Tablet (second monitor on same WiFi)
 
 1. Run `FH6-Livemap.exe` (or `FH6-Livemap-linux`) on your PC as normal
-2. Find your PC's local IP — run `ipconfig` in Command Prompt, look for **IPv4 Address** (e.g. `192.168.1.x`)
-3. On your tablet, open `http://192.168.1.x:5500/livemap.html` in a browser
-4. Bookmark it for easy access
+2. If Windows prompts you to allow the app through the firewall, click Allow and check both Private and Public. If it doesn't prompt, open Windows Defender Firewall → Inbound Rules → find `fh6-livemap.exe` and make sure both Private and Public are checked.
+3. Find your PC's local IP — run `ipconfig` in Command Prompt, look for **IPv4 Address** (e.g. `10.0.0.x`)
+4. On your tablet, open `http://10.0.0.x:5500/livemap.html` in a browser
+5. Bookmark it for easy access
 
-> **Note:** Your tablet and PC must be on the same network. Your PC's IP can change — if the tablet stops connecting, run `ipconfig` again to get the new IP. If the connection times out, check Windows Defender Firewall → find `fh6-livemap.exe` under Inbound Rules and make sure both Private and Public are checked.
+> **Note:** Your tablet and PC must be on the same network. Your PC's IP can change — if the tablet stops connecting, run `ipconfig` again to get the new IP.
 
 ---
 
