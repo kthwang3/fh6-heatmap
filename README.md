@@ -44,7 +44,7 @@ Community heatmap + real-time live map for Forza Horizon 6. See where the commun
 3. On your tablet, open `http://192.168.1.x:5500/livemap.html` in a browser
 4. Bookmark it for easy access
 
-> **Note:** Your tablet and PC must be on the same WiFi network. Windows may prompt you to allow the app through the firewall on first run — click Allow.
+> **Note:** Your tablet and PC must be on the same network. Your PC's IP can change — if the tablet stops connecting, run `ipconfig` again to get the new IP. If the connection times out, check Windows Defender Firewall → find `fh6-livemap.exe` under Inbound Rules and make sure both Private and Public are checked.
 
 ---
 
