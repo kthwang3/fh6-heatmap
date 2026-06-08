@@ -33,3 +33,16 @@ resource "aws_dynamodb_table" "counters_table" {
     type = "S"
   }
 }
+resource "aws_dynamodb_table" "users_table" {
+  name = "fh6-heatmap-users"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key = "machine_uuid"
+  attribute {
+    name = "machine_uuid"
+    type = "S"
+  }
+  ttl {
+    attribute_name = "ttl"
+    enabled = true
+  }
+}

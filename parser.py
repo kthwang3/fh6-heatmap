@@ -41,6 +41,21 @@ def start_livemap_server(base_path):
   thread.daemon = True
   thread.start()
 
+# return existing id if exists, otheriwse make a new one and return that one
+def get_machine_uuid():
+  try:
+    uuid_file = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), '.fh6heatmap_id')
+    if os.path.exists(uuid_file):
+      with open(uuid_file, 'r') as f:
+        return f.read().strip()
+    new_uuid = str(uuid.uuid4())
+    with open(uuid_file, 'w') as f:
+      f.write(new_uuid)
+    return new_uuid
+  except Exception:
+    return str(uuid.uuid4())
+
+
 #Livemap feature: broadcast position on every packet
 clients = set()
 
@@ -111,12 +126,17 @@ def parse(data: bytes) -> Packet:
   return Packet(*values)
 
 def udp_loop(event_loop, port=5301):
+  url = 'https://s60170byjh.execute-api.us-east-1.amazonaws.com/prod/position'
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   sock.bind(('', port))
   last_time = 0
   last_pos = (0.0, 0.0)
   lastState = 0
   my_uuid = uuid.uuid4()
+  machine_uuid = get_machine_uuid()
+  batch = []
+  last_flush_time = time.time()
+
   while True:
     data, sender_address = sock.recvfrom(1024)
     if len(data) != 324:
@@ -135,14 +155,18 @@ def udp_loop(event_loop, port=5301):
 
     asyncio.run_coroutine_threadsafe(broadcast(pkt.PositionX, pkt.PositionZ, pkt.Speed), event_loop)
     last_x, last_z = last_pos
-    if time.time() - last_time >= 10 or (((last_x - pkt.PositionX)**2 + (last_z - pkt.PositionZ)**2)**0.5) >= 50:
+    if time.time() - last_time >= 10 or (((last_x - pkt.PositionX)**2 + (last_z - pkt.PositionZ)**2)**0.5) >= 100:
       last_time = time.time()
       last_pos = (pkt.PositionX, pkt.PositionZ)
       timestamp = str(int(time.time() * 1000))
-      url = 'https://s60170byjh.execute-api.us-east-1.amazonaws.com/prod/position'
-
+      
       #POST to API Gateway URL
-      requests.post(url, json={'timestamp': timestamp, 'session_id': str(my_uuid), 'x_pos': pkt.PositionX, 'z_pos': pkt.PositionZ, 'car_ordinal': pkt.CarOrdinal, 'car_class': pkt.CarClass, 'car_performance_index': pkt.CarPerformanceIndex})
+      batch.append({'timestamp': timestamp, 'session_id': str(my_uuid), 'x_pos': pkt.PositionX, 'z_pos': pkt.PositionZ, 'car_ordinal': pkt.CarOrdinal, 'car_class': pkt.CarClass, 'car_performance_index': pkt.CarPerformanceIndex})
+      if len(batch) >= 10 or time.time() - last_flush_time >= 60:
+        requests.post(url, json={'machine_uuid': machine_uuid, 'positions': batch}, headers={'x-client-version': '2'})
+        batch = []
+        last_flush_time = time.time()
+
 
 # 1. Start websocket server -> browsers
 # 2. Launch udp_loop in a background threat -> FH6 packets
