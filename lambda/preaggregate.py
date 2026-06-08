@@ -1,6 +1,7 @@
 import json
 import boto3
-import time
+from boto3.dynamodb.conditions import Key
+from datetime import datetime, timezone, timedelta
 
 FACTOR_X = 3.5131
 OFFSET_X = 3244
@@ -14,7 +15,33 @@ GRID_H = 200
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table('fh6-heatmap-table')
 s3_client = boto3.client('s3')
+counters_table = dynamodb.Table('fh6-heatmap-grid-table')
 
+#use for all-time heatmap
+def build_all_time(counters):
+  grid = [[0] * GRID_W for _ in range(GRID_H)]
+  car_grid = [[{} for _ in range(GRID_W)] for _ in range(GRID_H)]
+  car_counts = {}
+  for item in counters:
+    col_str, row_str = item['col_row'].split('_')
+    col = int(col_str)
+    row = int(row_str)
+    grid[row][col] = int(item['count'])
+    if 'cars' in item:
+      for ordinal_str, car_data in item['cars'].items():
+        car_ordinal = int(ordinal_str)
+        car_count = int(car_data['count'])
+        car_grid[row][col][car_ordinal] = {
+          'count': car_count,
+          'car_class': int(car_data['car_class']),
+          'car_performance_index': int(car_data['car_performance_index'])
+        }
+        car_counts[car_ordinal] = car_counts.get(car_ordinal, 0) + car_count
+  sorted_ordinals = sorted(car_counts, key=car_counts.get, reverse=True)[:10]
+  leaderboard = [{'ordinal': ordinal, 'count': car_counts[ordinal]} for ordinal in sorted_ordinals]
+  return grid, car_grid, leaderboard
+
+#use for day/week filters
 def compute_grid(filtered_items):
   grid = [[0] * GRID_W for _ in range(GRID_H)]
   car_grid = [[{} for _ in range(GRID_W)] for _ in range(GRID_H)]
@@ -39,14 +66,6 @@ def compute_grid(filtered_items):
 
   return grid, car_grid
 
-
-def filter_items(items, cutoff_ms):
-  filtered_items = []
-  for item in items:
-    if int(item['timestamp']) >= cutoff_ms:
-      filtered_items.append(item)
-  return filtered_items
-
 def compute_leaderboard(items):
   car_counts = {}
   for item in items:
@@ -62,30 +81,42 @@ def compute_leaderboard(items):
     leaderboard.append({'ordinal': ordinal, 'count': car_counts[ordinal]})
   return leaderboard
 
-def handler(event, context):
+def query_gsi_days(num_days):
+  today = datetime.now(tz=timezone.utc)
   items = []
-  response = table.scan()
-  items += response['Items']
-  #bookmark last key and continue until all data is read
-  while 'LastEvaluatedKey' in response:
-    response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+  # subtract days from today up to num_days apart
+  for i in range(num_days):
+    date_str = (today - timedelta(days=i)).strftime('%Y-%m-%d')
+    response = table.query(
+      IndexName='date-index',
+      KeyConditionExpression=Key('date').eq(date_str)
+    )
     items += response['Items']
-  current_time_ms = time.time() * 1000
+    while 'LastEvaluatedKey' in response:
+      response = table.query(
+        IndexName='date-index',
+        KeyConditionExpression=Key('date').eq(date_str),
+        ExclusiveStartKey=response['LastEvaluatedKey']
+      )
+      items += response['Items']
+  return items
 
-  week_cutoff = current_time_ms - 7 * 24 * 60 * 60 * 1000
-  month_cutoff = current_time_ms - 31 * 24 * 60 * 60 * 1000
+def handler(event, context):
+  day_items = query_gsi_days(1)
+  week_items = query_gsi_days(7)
 
-  filtered_week = filter_items(items, week_cutoff)
-  filtered_month = filter_items(items, month_cutoff)
+  counters = []
+  response = counters_table.scan()
+  counters += response['Items']
+  while 'LastEvaluatedKey' in response:
+    response = counters_table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+    counters += response['Items']
 
-  all_time_grid, all_time_car_grid = compute_grid(items)
-  week_grid, week_car_grid = compute_grid(filtered_week)
-  month_grid, month_car_grid = compute_grid(filtered_month)
-
-  #now find the top ten cars on the leaderboard
-  all_time_car_leaderboard = compute_leaderboard(items)
-  week_car_leaderboard = compute_leaderboard(filtered_week)
-  month_car_leaderboard = compute_leaderboard(filtered_month)
+  all_time_grid, all_time_car_grid, all_time_leaderboard = build_all_time(counters)
+  day_grid, day_car_grid = compute_grid(day_items)
+  week_grid, week_car_grid = compute_grid(week_items)
+  day_leaderboard = compute_leaderboard(day_items)
+  week_leaderboard = compute_leaderboard(week_items)
 
   s3_client.put_object(
     Bucket='fh6-heatmap-s3-kthwang3',
@@ -101,25 +132,25 @@ def handler(event, context):
   )
   s3_client.put_object(
     Bucket='fh6-heatmap-s3-kthwang3',
-    Key='month-grids.json',
-    Body=json.dumps({'grid': month_grid, 'car_grid': month_car_grid}),
+    Key='day-grids.json',
+    Body=json.dumps({'grid': day_grid, 'car_grid': day_car_grid}),
     ContentType='application/json'
   )
   s3_client.put_object(
     Bucket='fh6-heatmap-s3-kthwang3',
     Key='car-leaderboard-all-time.json',
-    Body=json.dumps({'all-time-leaderboard': all_time_car_leaderboard}),
+    Body=json.dumps({'all-time-leaderboard': all_time_leaderboard}),
     ContentType='application/json'
   )
   s3_client.put_object(
     Bucket='fh6-heatmap-s3-kthwang3',
     Key='car-leaderboard-week.json',
-    Body=json.dumps({'week-leaderboard': week_car_leaderboard}),
+    Body=json.dumps({'week-leaderboard': week_leaderboard}),
     ContentType='application/json'
   )
   s3_client.put_object(
     Bucket='fh6-heatmap-s3-kthwang3',
-    Key='car-leaderboard-month.json',
-    Body=json.dumps({'month-leaderboard': month_car_leaderboard}),
+    Key='car-leaderboard-day.json',
+    Body=json.dumps({'day-leaderboard': day_leaderboard}),
     ContentType='application/json'
   )

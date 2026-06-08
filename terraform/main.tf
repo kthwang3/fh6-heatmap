@@ -15,6 +15,7 @@ module "dynamodb" {
 module "lambda" {
   source = "./modules/lambda"
   dynamodb_table_name = module.dynamodb.table_name
+  stream_arn = module.dynamodb.stream_arn
 }
 module "api_gateway" {
   source = "./modules/api_gateway"

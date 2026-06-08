@@ -1,6 +1,7 @@
 import json
 import boto3
 from decimal import Decimal
+from datetime import datetime, timezone
 
 def handler(event, context):
   try:
@@ -24,7 +25,8 @@ def handler(event, context):
         'z_pos': z_pos,
         'car_ordinal': car_ordinal,
         'car_class': car_class,
-        'car_performance_index': car_performance_index
+        'car_performance_index': car_performance_index,
+        'date': datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
       }
     )
     return {

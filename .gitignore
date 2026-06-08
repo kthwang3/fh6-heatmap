@@ -7,3 +7,5 @@ fh6-frontend-context.md
 *.tfstate.backup
 lambda.zip
 __pycache__/
+images/old_images/
+venv/

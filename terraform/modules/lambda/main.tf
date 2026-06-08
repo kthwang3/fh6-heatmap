@@ -49,6 +49,20 @@ resource "aws_lambda_function" "lambda_preaggregate"{
   role = aws_iam_role.lambda_role.arn
   timeout = 600
   source_code_hash = filebase64sha256("../lambda.zip")
+  memory_size = 1024
+}
+resource "aws_lambda_function" "lambda_stream_processor"{
+  function_name = "fh6-lambda-stream-processor"
+  runtime = "python3.12"
+  handler = "stream_processor.handler"
+  filename = "../lambda.zip"
+  role = aws_iam_role.lambda_role.arn
+  source_code_hash = filebase64sha256("../lambda.zip")
+}
+resource "aws_lambda_event_source_mapping" "lambda_event_source_mapping"{
+  event_source_arn = var.stream_arn
+  function_name = aws_lambda_function.lambda_stream_processor.function_name
+  starting_position = "LATEST"
 }
 resource "aws_lambda_permission" "allow_api_gateway" {
   statement_id = "AllowAPIGatewayInvoke"
