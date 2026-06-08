@@ -54,7 +54,7 @@ Community heatmap + real-time live map for Forza Horizon 6. See where the commun
 
 ## Features
 
-- **Community Heatmap** — aggregate heatmap of all recorded positions, filterable by all time / week / month. Updated every 15 minutes.
+- **Community Heatmap** — aggregate heatmap of all recorded positions, filterable by all time / week / day. Updated every hour.
 - **Live Map** — real-time dot on the Japan map served locally over localhost. No data leaves your machine for this feature.
 
 ---
@@ -95,29 +95,34 @@ flowchart TD
     WriteLambda -->|"sessionId + timestamp\n+ position + car"| DDB
 ```
 
-- **300x API call reduction** — 60Hz UDP sampled to 1 POST per 10 seconds before any network call
+- **600x API call reduction** — 60Hz UDP sampled to 1 POST per 10 seconds before any network call
 - **Serverless ingestion** — 1,000 concurrent users, p95 520ms, 0% failure rate across 23,652 requests
 
 ### Read Path — Heatmap Delivery
 
 ```mermaid
 flowchart TD
-    EB["EventBridge\nrate(15 minutes)"]
+    EB["EventBridge\nrate(1 hour)"]
     AggLambda["Lambda\npreaggregate.py"]
     DDB[("DynamoDB\nfh6-heatmap-table")]
+    StreamLambda["Lambda\nstream_processor.py"]
+    Counters[("DynamoDB\nfh6-heatmap-grid-table\n(counters)")]
     S3[("S3\nfh6-heatmap-s3-kthwang3")]
     CF["CloudFront CDN"]
     Site["Heatmap Website\nd229cekzpyx88w.cloudfront.net"]
 
+    DDB -->|"DynamoDB Streams\n(INSERT events)"| StreamLambda
+    StreamLambda -->|"increment col_row counters"| Counters
     EB -->|"scheduled trigger"| AggLambda
-    DDB -->|"full scan"| AggLambda
-    AggLambda -->|"all-time-grids.json\nweek-grids.json\nmonth-grids.json"| S3
+    Counters -->|"scan explored cells\n(all-time)"| AggLambda
+    DDB -->|"Date GSI query\n(day / week)"| AggLambda
+    AggLambda -->|"all-time-grids.json\nweek-grids.json\nday-grids.json"| S3
     S3 --> CF
     CF -->|"cached static JSON\n<200ms warm hit"| Site
 ```
 
 - **<200ms heatmap load time** — CloudFront-cached static JSON vs ~19s live DynamoDB scan before pre-aggregation
-- Pre-aggregation runs on a 15-minute schedule, decoupling read latency from table size entirely
+- Pre-aggregation reads the counters table (one item per explored grid cell, max 40,000) + Date GSI queries instead of scanning the full positions table
 
 ---
 
@@ -137,9 +142,11 @@ graph TD
         subgraph Compute
             Lambda1[Lambda\nmain.py]
             Lambda2[Lambda\npreaggregate.py]
+            Lambda3[Lambda\nstream_processor.py]
         end
         subgraph Storage
-            DDB[(DynamoDB)]
+            DDB[(DynamoDB\npositions table)]
+            Counters[(DynamoDB\ncounters table)]
             S3[(S3)]
         end
         subgraph Scheduling
@@ -157,24 +164,32 @@ graph TD
     Internet -->|HTTPS| CF
     APIGW --> Lambda1
     Lambda1 --> DDB
+    DDB -->|DynamoDB Streams| Lambda3
+    Lambda3 --> Counters
     CF --> S3
     EB --> Lambda2
-    DDB -->|scan| Lambda2
+    Counters -->|scan explored cells| Lambda2
+    DDB -->|Date GSI query| Lambda2
     Lambda2 --> S3
     GHA -->|s3 sync frontend/| S3
     GHA -->|windows runner build| Releases[GitHub Releases]
     TF -->|provisions| AWS
     IAM -.->|execution role| Lambda1
     IAM -.->|execution role| Lambda2
+    IAM -.->|execution role| Lambda3
 ```
 
 **API Gateway** — public HTTPS endpoint that receives position POSTs from every running `.exe` instance and forwards them to Lambda. Handles request routing, throttling, and TLS termination.
 
 **Lambda (main.py)** — write handler. Parses the incoming position payload and writes one DynamoDB item per sampled point. Stateless, scales automatically with concurrent users.
 
-**Lambda (preaggregate.py)** — aggregation worker. Runs every 15 minutes, scans the full DynamoDB table, computes three heatmap grids (all time / week / month) and three car leaderboards, then writes six JSON files to S3.
+**Lambda (preaggregate.py)** — aggregation worker. Runs every hour, reads the counters table for all-time data and queries the Date GSI for day/week data, computes three heatmap grids and three car leaderboards, then writes six JSON files to S3.
 
-**DynamoDB** — stores every recorded position point as an item with sessionId (partition key), timestamp (sort key), X/Z coordinates, and car metadata. Pay-per-request billing — no capacity planning needed.
+**Lambda (stream_processor.py)** — stream consumer. Fires on every position INSERT via DynamoDB Streams, computes the grid cell, and atomically increments counters in the counters table. Keeps all-time aggregates live without any scheduled scan.
+
+**DynamoDB (positions table)** — stores every recorded position as an item with sessionId (partition key), timestamp (sort key), X/Z coordinates, car metadata, and date. A Date GSI enables efficient day/week queries without scanning the full table. Pay-per-request billing — no capacity planning needed.
+
+**DynamoDB (counters table)** — stores one item per explored grid cell (capped at 40,000 cells max — the 200×200 grid) with a total hit count and a nested map of car counts per cell. Maintained live by stream_processor. preaggregate reads this instead of scanning 473k+ positions for all-time data.
 
 **S3** — stores the static frontend (`index.html`, map image) and the pre-aggregated JSON files written by the aggregation Lambda. Also stores Terraform state.
 

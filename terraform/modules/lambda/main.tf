@@ -78,7 +78,7 @@ resource "aws_lambda_permission" "allow_api_gateway_aggregate" {
 }
 resource "aws_cloudwatch_event_rule" "preaggregate_schedule" {
   name = "preaggregate_schedule"
-  schedule_expression = "rate(15 minutes)"
+  schedule_expression = "rate(1 hour)"
 }
 resource "aws_cloudwatch_event_target" "preaggregate_target" {
   rule = aws_cloudwatch_event_rule.preaggregate_schedule.name
